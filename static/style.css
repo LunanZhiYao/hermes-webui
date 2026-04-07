@@ -100,6 +100,14 @@
     --focus-ring:rgba(129,161,193,.35);--focus-glow:rgba(129,161,193,.08);
     --strong:#eceff4;--em:#b8c0cc;--code-text:#a3be8c;--code-inline-bg:rgba(0,0,0,.2);--pre-text:#d8dee9;
   }
+  /* ── OLED theme ── */
+  :root[data-theme="oled"]{
+    --bg:#000000;--sidebar:#000000;--border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.12);
+    --text:#e0e0e0;--muted:#777777;--accent:#ff3b5c;--blue:#6cb4ff;--gold:#d4a74a;--code-bg:#080808;
+    --surface:#0a0a0a;--topbar-bg:rgba(0,0,0,.98);--main-bg:rgba(0,0,0,0.5);
+    --focus-ring:rgba(108,180,255,.3);--focus-glow:rgba(108,180,255,.06);
+    --strong:#ffffff;--em:#c0c0d0;--code-text:#e8b86d;--code-inline-bg:rgba(255,255,255,.06);--pre-text:#d0d0d8;
+  }
   body{background:var(--bg);color:var(--text);height:100vh;height:100dvh;overflow:hidden;display:flex;}
   .layout{display:flex;width:100%;height:100vh;height:100dvh;}
   .sidebar{width:300px;background:var(--sidebar);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:visible;flex-shrink:0;}
