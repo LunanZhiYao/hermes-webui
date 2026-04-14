@@ -608,6 +608,7 @@
   <a class="tab-pill" href="#writing">✍️ Writing</a>
   <a class="tab-pill" href="#search">🔍 Search</a>
   <a class="tab-pill" href="#reasoning">🧮 Reasoning</a>
+  <a class="tab-pill" href="#local">🖥️ Local models</a>
   <a class="tab-pill" href="#howto">⚙️ How to configure</a>
 </div>
 
@@ -1174,6 +1175,127 @@
 
 <div class="section-divider"></div>
 
+<div class="section-divider"></div>
+
+<!-- =========================================
+     LOCAL MODELS
+     ========================================= -->
+<div id="local" class="section-alt">
+  <div class="model-section">
+    <div class="section-header">
+      <div class="section-icon icon-green">🖥️</div>
+      <div class="section-header-text">
+        <h2>Best models to run locally</h2>
+        <p>Open-weight models you can run on hardware you own — no API key, no monthly bill, no data leaving your machine. Ranked by practical capability on consumer GPU and Apple Silicon hardware.</p>
+      </div>
+    </div>
+
+    <div class="model-list">
+      <!-- #1 -->
+      <div class="model-card" style="--model-color: #4a9eff;">
+        <div class="rank-badge gold">🥇</div>
+        <div class="model-info">
+          <h3>Gemma 4 31B</h3>
+          <div class="model-meta">Google &middot; Apache 2.0 &middot; 256K context &middot; ~20 GB VRAM (Q4)</div>
+          <div class="model-why">The best single-GPU open model in 2026. 84.3% on GPQA Diamond, 80.0% on LiveCodeBench v6, 89.2% on AIME 2026 math. Dense architecture (all 31B active every call) gives it consistent quality without the coordination overhead of MoE. Genuinely multimodal — text and images. Runs on an RTX 3090/4090 or an M2/M3 Pro MacBook. Apache 2.0 means you can fine-tune and deploy commercially. The cloud-model quality gap is now thin at this tier.</div>
+          <div class="model-pills">
+            <span class="pill blue">GPQA 84.3%</span>
+            <span class="pill green">Apache 2.0</span>
+            <span class="pill gold">20 GB VRAM</span>
+          </div>
+        </div>
+        <div class="model-score">
+          <span class="score-val">84.3%</span>
+          <span class="score-label">GPQA Diamond</span>
+        </div>
+      </div>
+
+      <!-- #2 -->
+      <div class="model-card" style="--model-color: #f0a500;">
+        <div class="rank-badge silver">🥈</div>
+        <div class="model-info">
+          <h3>Qwen 3.5 27B</h3>
+          <div class="model-meta">Alibaba &middot; Apache 2.0 &middot; 800K context &middot; ~16 GB VRAM (Q4)</div>
+          <div class="model-why">Best coding benchmark of any model that fits on a 16 GB GPU — 72.4% SWE-bench Verified, which beats models twice its size. The 800K token context window handles large codebases in a single pass. Dual-mode: fast direct answers or slow chain-of-thought reasoning when you need it. Runs on an RTX 4080, M2/M3 Max, or any machine with 16 GB VRAM. Instruction-following (IFBench 76.5%) beats GPT-5.2. The pragmatic local pick for developers.</div>
+          <div class="model-pills">
+            <span class="pill gold">SWE 72.4%</span>
+            <span class="pill blue">800K context</span>
+            <span class="pill green">16 GB VRAM</span>
+          </div>
+        </div>
+        <div class="model-score">
+          <span class="score-val">72.4%</span>
+          <span class="score-label">SWE-bench</span>
+        </div>
+      </div>
+
+      <!-- #3 -->
+      <div class="model-card" style="--model-color: #3fb950;">
+        <div class="rank-badge bronze">🥉</div>
+        <div class="model-info">
+          <h3>DeepSeek R1 32B (distill)</h3>
+          <div class="model-meta">DeepSeek &middot; MIT &middot; 128K context &middot; ~17 GB VRAM (Q4)</div>
+          <div class="model-why">The strongest reasoning model you can run on a single RTX 4090. This is the 32B knowledge-distilled version of the 671B DeepSeek R1 — same chain-of-thought training, fraction of the compute. 62.1% GPQA Diamond, 72.0% AIME 2025, 85.4% HumanEval. It approaches the full model on math and logical deduction. MIT license, free to fine-tune. The right pick when you need to solve hard problems locally — theorem-level math, complex debugging, multi-step analysis — on hardware you already own.</div>
+          <div class="model-pills">
+            <span class="pill orange">MIT license</span>
+            <span class="pill blue">Chain-of-thought</span>
+            <span class="pill green">17 GB VRAM</span>
+          </div>
+        </div>
+        <div class="model-score">
+          <span class="score-val">62.1%</span>
+          <span class="score-label">GPQA Diamond</span>
+        </div>
+      </div>
+
+      <!-- #4 -->
+      <div class="model-card" style="--model-color: #8b949e;">
+        <div class="rank-badge">4</div>
+        <div class="model-info">
+          <h3>Llama 4 Scout</h3>
+          <div class="model-meta">Meta &middot; Llama 4 Community License &middot; 10M context &middot; ~24 GB VRAM (Q4)</div>
+          <div class="model-why">One trick that nothing else matches: a 10 million token context window — fit entire codebases, entire books, months of logs in a single prompt. MoE architecture (109B total, only 17B active) keeps inference fast despite the scale. Natively multimodal with text and image support. MMLU 74.3%, HumanEval 81.2%. The context window alone makes it worth running if your use case involves huge documents or large repo Q&amp;A. Note: not true open source — the Llama 4 Community License restricts deployment at 700M+ MAU.</div>
+          <div class="model-pills">
+            <span class="pill purple">10M context</span>
+            <span class="pill blue">Multimodal</span>
+            <span class="pill gold">24 GB VRAM</span>
+          </div>
+        </div>
+        <div class="model-score">
+          <span class="score-val">10M</span>
+          <span class="score-label">token context</span>
+        </div>
+      </div>
+
+      <!-- #5 -->
+      <div class="model-card" style="--model-color: #ff9040;">
+        <div class="rank-badge">5</div>
+        <div class="model-info">
+          <h3>Phi-4 Reasoning 14B</h3>
+          <div class="model-meta">Microsoft &middot; MIT &middot; 32–64K context &middot; ~8 GB VRAM (Q4)</div>
+          <div class="model-why">The best model for machines with limited VRAM — an 8 GB GPU or a MacBook with 16 GB RAM. At only 14B parameters, Phi-4 Reasoning outperforms the DeepSeek R1 70B distill on several reasoning benchmarks, and the 3.8B mini variant runs on phones. Trained with Microsoft's compute-optimal recipe that prioritizes reasoning ability over raw parameter count. Short context (32–64K) is the main constraint; not suitable for large documents. But for logic puzzles, code review, math, and structured analysis, it's the most accessible local reasoning model available.</div>
+          <div class="model-pills">
+            <span class="pill green">8 GB VRAM</span>
+            <span class="pill orange">MIT license</span>
+            <span class="pill blue">Laptop-friendly</span>
+          </div>
+        </div>
+        <div class="model-score">
+          <span class="score-val">8 GB</span>
+          <span class="score-label">min VRAM</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="free-note">
+      <span class="note-icon">💡</span>
+      <span>Running locally means you own the model and the data. Use <a href="https://ollama.ai" target="_blank" style="color:var(--green)">Ollama</a> or <a href="https://github.com/ggerganov/llama.cpp" target="_blank" style="color:var(--green)">llama.cpp</a> to serve any of these, then point Hermes at your local server: set <code>provider: openai</code> with <code>base_url: http://localhost:11434/v1</code>. Your API key can be any string.</span>
+    </div>
+  </div>
+</div>
+
+<div class="section-divider"></div>
+
 <!-- =========================================
      HOW TO CONFIGURE
      ========================================= -->
@@ -1258,6 +1380,11 @@
           <div class="recommendation">OpenRouter</div>
           <div class="why-short">One API key, every model. Switch between Claude, GPT, Gemini instantly.</div>
         </div>
+        <div class="picker-card">
+          <div class="use-case"><span class="uc-icon">🖥️</span> Run privately</div>
+          <div class="recommendation">Gemma 4 31B or Qwen 3.5 27B</div>
+          <div class="why-short">No API key, no data leaving your machine. Best two on consumer hardware.</div>
+        </div>
       </div>
     </div>
   </div>
@@ -1326,7 +1453,7 @@
   });
 
   // Update active tab on scroll
-  var sections = ['overall','coding','writing','search','reasoning','howto'];
+  var sections = ['overall','coding','writing','search','reasoning','local','howto'];
   window.addEventListener('scroll', function() {
     var scrollY = window.scrollY + 120;
     var current = sections[0];
