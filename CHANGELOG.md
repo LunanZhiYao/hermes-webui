@@ -1,5 +1,10 @@
 # Hermes Web UI -- Changelog
 
+## [v0.50.93] — 2026-04-19
+
+### Fixed
+- **Gateway message sync no longer corrupts the active session on slow networks** — the `sessions_changed` SSE handler now captures the active session ID before the async `import_cli` fetch and validates it in `.then()`, preventing session-switch races from overwriting the wrong conversation. Added `is_cli_session` guard so the handler only fires for CLI-originated sessions. The backend import path now also verifies that existing messages are a strict prefix of the fresh CLI messages before overwriting, preventing silent data loss on hybrid WebUI+CLI sessions. (PR #676 by @yunyunyunyun-yun)
+
 ## [v0.50.91] — 2026-04-19
 
 ### Added
