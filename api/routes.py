@@ -2148,9 +2148,14 @@ def _handle_file_raw(handler, parsed):
     handler.send_header("Content-Type", mime)
     handler.send_header("Content-Length", str(len(raw_bytes)))
     handler.send_header("Cache-Control", "no-store")
-    # Security: force download for dangerous MIME types to prevent XSS
+    # Security: force download for dangerous MIME types to prevent XSS.
+    # Exception: ?inline=1 permits text/html to be served inline for the
+    # sandboxed workspace HTML preview iframe (sandbox="allow-scripts" with no
+    # allow-same-origin, so the iframe cannot access parent cookies/storage).
+    inline_preview = qs.get("inline", [""])[0] == "1"
     dangerous_types = {"text/html", "application/xhtml+xml", "image/svg+xml"}
-    if force_download or mime in dangerous_types:
+    html_inline_ok = inline_preview and mime == "text/html"
+    if force_download or (mime in dangerous_types and not html_inline_ok):
         handler.send_header(
             "Content-Disposition",
             _content_disposition_value("attachment", target.name),
@@ -2160,6 +2165,18 @@ def _handle_file_raw(handler, parsed):
             "Content-Disposition",
             _content_disposition_value("inline", target.name),
         )
+    # Defense-in-depth for ?inline=1 HTML: even though the workspace.js iframe
+    # sets sandbox="allow-scripts", a user could be tricked into opening the
+    # ?inline=1 URL directly in a top-level tab (e.g. via a chat link), which
+    # would render the HTML in the WebUI's origin without iframe sandbox. The
+    # CSP sandbox directive applies the same isolation server-side: without
+    # allow-same-origin, the document is treated as a unique opaque origin and
+    # cannot read WebUI cookies, localStorage, or postMessage to the parent.
+    if html_inline_ok:
+        # Match the iframe sandbox="allow-scripts" exactly: scripts allowed,
+        # but no allow-same-origin → unique opaque origin (no cookie/storage
+        # access even when accessed via direct URL outside the iframe).
+        handler.send_header("Content-Security-Policy", "sandbox allow-scripts")
     handler.end_headers()
     handler.wfile.write(raw_bytes)
     return True
