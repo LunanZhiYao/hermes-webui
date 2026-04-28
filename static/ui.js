@@ -100,9 +100,14 @@ function _findModelInDropdown(modelId, sel){
   const target=norm(modelId);
   const exact=opts.find(o=>norm(o)===target);
   if(exact) return exact;
-  // 3. Prefix/substring: target starts with or contains a significant chunk
+  // 3. Prefix/substring: require the candidate to start with the FULL normalized target
+  // (not a truncated base). This avoids false matches like gpt.5.5 → gpt.5.4.mini (#1188).
+  // Only fall back to the shorter base form if target itself is very short (a bare root
+  // like "gpt" or "claude") where stripping would be a no-op anyway.
   const base=target.replace(/\.\d+$/,'');  // strip trailing version number
-  const partial=opts.find(o=>norm(o).startsWith(base)||norm(o).includes(base));
+  const useBase=base.length<=4||base===target; // bare root — stripping changed nothing meaningful
+  const prefixTarget=useBase?base:target;
+  const partial=opts.find(o=>norm(o).startsWith(prefixTarget));
   return partial||null;
 }
 
@@ -2164,15 +2169,16 @@ function _formatMessageFooterTimestamp(tsVal){
   if(!tsVal) return '';
   const date=new Date(tsVal*1000);
   const now=new Date();
+  // Use _formatInServerTz when available — it correctly handles fractional-hour
+  // offsets like India +0530 that Etc/GMT cannot express. Falls back to plain
+  // toLocaleString when sessions.js hasn't loaded yet.
+  const fmt=(typeof _formatInServerTz==='function')?_formatInServerTz:null;
   if(_isSameLocalDay(date, now)){
-    return date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    const opts={hour:'2-digit', minute:'2-digit'};
+    return fmt?fmt(date,opts):date.toLocaleTimeString([], opts);
   }
-  return date.toLocaleString([], {
-    month:'short',
-    day:'numeric',
-    hour:'numeric',
-    minute:'2-digit',
-  });
+  const opts={month:'short', day:'numeric', hour:'numeric', minute:'2-digit'};
+  return fmt?fmt(date,opts):date.toLocaleString([], opts);
 }
 function _compressionStatusCardHtml({
   statusLabel,
@@ -2377,7 +2383,10 @@ function renderMessages(){
     const retryBtn = isLastAssistant ? `<button class="msg-action-btn" title="${t('regenerate')}" onclick="regenerateResponse(this)">${li('rotate-ccw',13)}</button>` : '';
     const copyBtn  = `<button class="msg-copy-btn msg-action-btn" title="${t('copy')}" onclick="copyMsg(this)">${li('copy',13)}</button>`;
     const tsVal=m._ts||m.timestamp;
-    const tsTitle=tsVal?new Date(tsVal*1000).toLocaleString():'';
+    // _formatInServerTz handles fractional-hour offsets (India +0530 etc.)
+    // correctly via offset arithmetic; bare toLocaleString is the browser-tz fallback.
+    const _fmtSv=(typeof _formatInServerTz==='function')?_formatInServerTz:null;
+    const tsTitle=tsVal?(_fmtSv?_fmtSv(new Date(tsVal*1000),{}):new Date(tsVal*1000).toLocaleString()):'';
     const tsTime=_formatMessageFooterTimestamp(tsVal);
     const timeHtml = tsTime ? `<span class="msg-time" title="${esc(tsTitle)}">${tsTime}</span>` : '';
     const footHtml = `<div class="msg-foot">${timeHtml}<span class="msg-actions">${editBtn}${copyBtn}${retryBtn}</span></div>`;
