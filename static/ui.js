@@ -1,4 +1,4 @@
-const S={session:null,messages:[],entries:[],busy:false,pendingFiles:[],toolCalls:[],activeStreamId:null,currentDir:'.',activeProfile:'default'};
+const S={session:null,messages:[],entries:[],busy:false,pendingFiles:[],toolCalls:[],activeStreamId:null,currentDir:'.',activeProfile:'default',currentUserId:null};
 const INFLIGHT={};  // keyed by session_id while request in-flight
 const SESSION_QUEUES={};  // keyed by session_id for queued follow-up turns
 // Tracks which session's queue to drain in setBusy(false).
@@ -43,6 +43,12 @@ function shiftQueuedSessionMessage(sid){
 function getQueuedSessionCount(sid){
   return _getSessionQueue(sid,false).length;
 }
+function clearHermesSessionQueuesInMemory(){
+  try{
+    for(const k of Object.keys(SESSION_QUEUES)) delete SESSION_QUEUES[k];
+  }catch(_){}
+}
+window.clearHermesSessionQueuesInMemory=clearHermesSessionQueuesInMemory;
 function _compressionSessionLock(){
   return window._compressionLockSid||null;
 }
@@ -661,7 +667,6 @@ async function _fetchLiveModels(provider, sel){
     const added=_addLiveModelsToSelect(provider,data.models,sel);
     if(added>0){
       if(typeof syncModelChip==='function') syncModelChip();
-      console.log('[hermes] Live models loaded for',provider+':',added,'new models added');
     }
   }catch(e){
     console.debug('[hermes] Live model fetch failed for',provider,e.message);
@@ -816,15 +821,19 @@ function renderModelDropdown(){
   _searchRow.innerHTML=`<input class="model-search-input" type="text" placeholder="${esc(t('model_search_placeholder')||'Search models…')}" spellcheck="false" autocomplete="off"><button class="model-search-clear" title="Clear search">${li('x',10)}</button>`;
   const _si=_searchRow.querySelector('.model-search-input');
   const _sc=_searchRow.querySelector('.model-search-clear');
-  // Create custom model section elements
-  const _custSep=document.createElement('div');
-  _custSep.className='model-group model-custom-sep';
-  _custSep.textContent=t('model_custom_label')||'Custom model ID';
-  const _custRow=document.createElement('div');
-  _custRow.className='model-custom-row';
-  _custRow.innerHTML=`<input class="model-custom-input" type="text" placeholder="${esc(t('model_custom_placeholder')||'e.g. openai/gpt-5.4')}" spellcheck="false" autocomplete="off"><button class="model-custom-btn" title="Use this model">${li('plus',12)}</button>`;
-  const _ci=_custRow.querySelector('.model-custom-input');
-  const _cb=_custRow.querySelector('.model-custom-btn');
+  // Custom model ID row: set false to hide (must also skip append/handlers below). 自定义模型 开关
+  const _showCustomModelRow=false;
+  let _custSep=null,_custRow=null,_ci=null,_cb=null;
+  if(_showCustomModelRow){
+    _custSep=document.createElement('div');
+    _custSep.className='model-group model-custom-sep';
+    _custSep.textContent=t('model_custom_label')||'Custom model ID';
+    _custRow=document.createElement('div');
+    _custRow.className='model-custom-row';
+    _custRow.innerHTML=`<input class="model-custom-input" type="text" placeholder="${esc(t('model_custom_placeholder')||'e.g. openai/gpt-5.4')}" spellcheck="false" autocomplete="off"><button class="model-custom-btn" title="Use this model">${li('plus',12)}</button>`;
+    _ci=_custRow.querySelector('.model-custom-input');
+    _cb=_custRow.querySelector('.model-custom-btn');
+  }
   const _configuredRank=(badge)=>{
     if(!badge) return Number.POSITIVE_INFINITY;
     if(badge.role==='primary') return 0;
@@ -860,8 +869,8 @@ function renderModelDropdown(){
     // Add search and custom elements first (CRITICAL: must be before models)
     dd.appendChild(_scopeNote);
     dd.appendChild(_searchRow);
-    dd.appendChild(_custSep);
-    dd.appendChild(_custRow);
+    if(_custSep) dd.appendChild(_custSep);
+    if(_custRow) dd.appendChild(_custRow);
     if(configuredModels.length){
       const configuredHeading=document.createElement('div');
       configuredHeading.className='model-group';
@@ -929,16 +938,17 @@ function renderModelDropdown(){
   // Event handlers for clear button
   _sc.onclick=()=>{ _si.value=''; _filterModels(''); _si.focus(); };
   _sc.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){ _si.value=''; _filterModels(''); _si.focus(); e.preventDefault(); }});
-  // Event handlers for custom input
-  const _applyCustom=()=>{const v=_ci.value.trim();if(!v)return;selectModelFromDropdown(v);_ci.value='';};
-  _cb.onclick=_applyCustom;
-  _ci.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();_applyCustom();}if(e.key==='Escape'){closeModelDropdown();}});
-  _ci.addEventListener('click',e=>e.stopPropagation());
+  if(_cb&&_ci){
+    const _applyCustom=()=>{const v=_ci.value.trim();if(!v)return;selectModelFromDropdown(v);_ci.value='';};
+    _cb.onclick=_applyCustom;
+    _ci.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();_applyCustom();}if(e.key==='Escape'){closeModelDropdown();}});
+    _ci.addEventListener('click',e=>e.stopPropagation());
+  }
   // Add search and custom elements to dropdown (initial render)
   dd.appendChild(_scopeNote);
   dd.appendChild(_searchRow);
-  dd.appendChild(_custSep);
-  dd.appendChild(_custRow);
+  if(_custSep) dd.appendChild(_custSep);
+  if(_custRow) dd.appendChild(_custRow);
   // Apply initial filter (empty shows all)
   _filterModels('');
 }
@@ -964,6 +974,7 @@ async function selectModelFromDropdown(value){
 }
 
 function toggleModelDropdown(){
+  /* Model picker disabled (footer chip is display-only). Former implementation:
   const dd=$('composerModelDropdown');
   const chip=$('composerModelChip');
   const sel=$('modelSelect');
@@ -980,6 +991,8 @@ function toggleModelDropdown(){
   chip.classList.add('active');
   const mobileAction=$('composerMobileModelAction');
   if(mobileAction) mobileAction.classList.add('active');
+  */
+  return;
 }
 
 function closeModelDropdown(){
@@ -1010,15 +1023,35 @@ window.addEventListener('resize',()=>{
 });
 
 // ── Reasoning effort chip ────────────────────────────────────────────────────
+// Per-browser preference (localStorage) + non-persisting POST so shared
+// config.yaml agent.reasoning_effort is not mutated on every user in multi-tenant
+// deployments. Actual model effort is applied via reasoning_effort on /api/chat/start.
+const REASONING_EFFORT_LS_KEY='hermes-webui-reasoning-effort';
 let _currentReasoningEffort=null;
 
 function _normalizeReasoningEffort(eff){
   return String(eff||'').trim().toLowerCase();
 }
 
-function _formatReasoningEffortLabel(effort){
-  if(effort==='none') return 'None';
-  if(!effort) return 'Default';
+/** Optional fields for /api/chat/start, /api/btw, /api/background when LS overrides YAML.
+ *  Key absent → no per-browser row (agent uses profile YAML as-is).
+ *  Key present with "" → user chose UI 「默认」; keep that across reloads (do not refetch GET /api/reasoning for display). */
+function reasoningEffortChatPayload(){
+  try{
+    if(localStorage.getItem(REASONING_EFFORT_LS_KEY)===null) return {};
+    return { reasoning_effort: localStorage.getItem(REASONING_EFFORT_LS_KEY)||'' };
+  }catch(_){ return {}; }
+}
+window.reasoningEffortChatPayload=reasoningEffortChatPayload;
+
+function _reasoningEffortDisplayLabel(effort){
+  const e=_normalizeReasoningEffort(effort);
+  if(!e) return typeof t==='function'?t('reasoning_effort_default'):'Default';
+  if(e==='none') return typeof t==='function'?t('reasoning_effort_none'):'None';
+  const key=(
+    {minimal:'reasoning_effort_minimal',low:'reasoning_effort_low',medium:'reasoning_effort_medium',high:'reasoning_effort_high',xhigh:'reasoning_effort_xhigh'}
+  )[e];
+  if(key&&typeof t==='function') return t(key);
   return effort;
 }
 
@@ -1033,19 +1066,27 @@ function _applyReasoningChip(eff){
   if(!wrap||!label) return;
   wrap.style.display='';
   if(mobileAction) mobileAction.style.display='';
-  const text=_formatReasoningEffortLabel(effort);
+  const text=_reasoningEffortDisplayLabel(effort);
   label.textContent=text;
   if(mobileLabel) mobileLabel.textContent=text;
   if(chip){
     const inactive=!effort||effort==='none';
     chip.classList.toggle('inactive',inactive);
-    chip.title='Reasoning effort: '+text;
+    chip.title=(typeof t==='function'?t('reasoning_effort_chip_title',text):('Reasoning effort: '+text));
   }
   if(mobileAction) mobileAction.classList.toggle('inactive',!effort||effort==='none');
   _highlightReasoningOption(effort);
 }
 
 function fetchReasoningChip(){
+  try{
+    // '' is valid (explicit 「默认」); only missing key falls through to GET /api/reasoning.
+    if(localStorage.getItem(REASONING_EFFORT_LS_KEY)!==null){
+      const v=localStorage.getItem(REASONING_EFFORT_LS_KEY)||'';
+      _applyReasoningChip(v);
+      return;
+    }
+  }catch(_){}
   api('/api/reasoning').then(function(st){
     _applyReasoningChip((st&&st.reasoning_effort)||'');
   }).catch(function(){_applyReasoningChip('');});
@@ -1059,8 +1100,11 @@ function syncReasoningChip(){
 function _highlightReasoningOption(effort){
   const dd=$('composerReasoningDropdown');
   if(!dd) return;
+  const e=_normalizeReasoningEffort(effort);
   dd.querySelectorAll('.reasoning-option').forEach(function(opt){
-    opt.classList.toggle('selected',opt.dataset.effort===effort);
+    const de=opt.dataset.effort||'';
+    const sel=(!e&&de==='default')||(e&&de===e);
+    opt.classList.toggle('selected',sel);
   });
 }
 
@@ -1117,12 +1161,17 @@ document.addEventListener('click',function(e){
     const opt=e.target.closest('.reasoning-option');
     const effort=opt&&opt.dataset.effort;
     if(effort){
-      api('/api/reasoning',{method:'POST',body:JSON.stringify({effort:effort})})
+      api('/api/reasoning',{method:'POST',body:JSON.stringify({effort:effort,persist:false})})
         .then(function(st){
-          _applyReasoningChip((st&&st.reasoning_effort)||effort);
-          showToast('🧠 Reasoning effort set to '+((st&&st.reasoning_effort)||effort));
+          const raw=(st&&st.reasoning_effort)!=null?String(st.reasoning_effort):effort;
+          const eff=_normalizeReasoningEffort(raw==='default'?'':raw);
+          try{
+            localStorage.setItem(REASONING_EFFORT_LS_KEY,eff||'');
+          }catch(_){}
+          _applyReasoningChip(eff);
+          showToast('🧠 '+(typeof t==='function'?t('reasoning_toast_set',_reasoningEffortDisplayLabel(eff)):('Reasoning effort set to '+eff)));
         })
-        .catch(function(){showToast('🧠 Failed to set effort');});
+        .catch(function(){showToast('🧠 '+(typeof t==='function'?t('reasoning_toast_failed'):'Failed to set effort'));});
       closeReasoningDropdown();
     }
   }
@@ -3277,9 +3326,12 @@ function _showAgentHealthAlert(payload){
   const title=$('agentHealthTitle');
   const details=$('agentHealthDetails');
   if(!banner) return;
-  if(title) title.textContent='Hermes agent is not responding';
-  const state=payload&&payload.details&&payload.details.gateway_state?` State: ${payload.details.gateway_state}.`:'';
-  if(details) details.textContent=`Gateway heartbeat failed.${state} Messages may not be delivered until it comes back.`;
+  if(title) title.textContent='云千易助手未响应';
+  const gw=payload&&payload.details&&payload.details.gateway_state;
+  const state=gw?(typeof t==='function'?(' '+t('agent_health_state',gw)):(` State: ${gw}.`)):'';
+  if(details){
+    details.textContent=(typeof t==='function'?t('agent_health_alert_message',state):(`Gateway heartbeat failed.${state} Messages may not be delivered until it comes back.`));
+  }
   banner.hidden=false;
   banner.classList.add('visible');
 }
@@ -3573,7 +3625,7 @@ async function checkInflightOnBoot(sid) {
 
 function syncTopbar(){
   if(!S.session){
-    document.title=window._botName||'Hermes';
+    document.title=window._botName||'云千易';
     if(typeof syncWorkspaceDisplays==='function') syncWorkspaceDisplays();
     if(typeof syncModelChip==='function') syncModelChip();
     if(typeof syncTerminalButton==='function') syncTerminalButton();
@@ -3590,9 +3642,9 @@ function syncTopbar(){
     if(_profileLabel) _profileLabel.textContent=S.activeProfile||'default';
     return;
   }
-  const sessionTitle=S.session.title||t('untitled');
+  const sessionTitle=sessionDisplayTitle(S.session.title);
   const _topbarTitle=$('topbarTitle');if(_topbarTitle)_topbarTitle.textContent=sessionTitle;
-  document.title=sessionTitle+' \u2014 '+(window._botName||'Hermes');
+  document.title=sessionTitle+' \u2014 '+(window._botName||'云千易');
   const vis=S.messages.filter(m=>m&&m.role&&m.role!=='tool');
   const _topbarMeta=$('topbarMeta');
   if(_topbarMeta){
@@ -3703,7 +3755,7 @@ function isTpsDisplayEnabled(){
   return window._showTps===true;
 }
 function _assistantRoleHtml(tsTitle='', tpsText=''){
-  const _bn=window._botName||'Hermes';
+  const _bn=window._botName||'云千易';
   const tps=(isTpsDisplayEnabled()&&tpsText)?`<span class="msg-tps-inline" title="Tokens per second">${esc(tpsText)}</span>`:'';
   return `<div class="msg-role assistant" ${tsTitle?`title="${esc(tsTitle)}"`:''}><div class="role-icon assistant">${esc(_bn.charAt(0).toUpperCase())}</div><span style="font-size:12px">${esc(_bn)}</span>${tps}</div>`;
 }
@@ -5869,7 +5921,10 @@ function renderFileTree(){
   S._dirCache[S.currentDir||'.']=S.entries;
   // Show empty-state when no workspace is set or the directory is empty (#703)
   const emptyEl=$('wsEmptyState');
-  const hasWorkspace=!!(S.session&&S.session.workspace);
+  const hasWorkspace=!!(
+    (S.session && S.session.workspace)
+    || (typeof S._profileDefaultWorkspace === 'string' && S._profileDefaultWorkspace.trim())
+  );
   if(!hasWorkspace){
     if(emptyEl){emptyEl.textContent=t('workspace_empty_no_path');emptyEl.style.display='flex';}
     box.style.display='none';
@@ -6011,7 +6066,10 @@ function _renderTreeItems(container, entries, depth){
           // Fetch children if not cached
           if(!S._dirCache[item.path]){
             try{
-              const data=await api(`/api/list?session_id=${encodeURIComponent(S.session.session_id)}&path=${encodeURIComponent(item.path)}`);
+              const listFn=(typeof window._apiWorkspaceList==='function')
+                ? window._apiWorkspaceList
+                : (p)=>api(`/api/list?session_id=${encodeURIComponent(S.session.session_id)}&path=${encodeURIComponent(p)}`);
+              const data=await listFn(item.path);
               S._dirCache[item.path]=data.entries||[];
             }catch(e2){S._dirCache[item.path]=[];}
           }

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hermes</title>
+<title>云千易</title>
 <link rel="icon" type="image/svg+xml" href="static/favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="static/favicon-32.png">
 <link rel="shortcut icon" href="static/favicon.ico">
@@ -11,7 +11,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Hermes">
+<meta name="apple-mobile-web-app-title" content="云千易">
 <link rel="apple-touch-icon" sizes="512x512" href="static/apple-touch-icon.png">
 <!-- base href enables subpath mount support; all static paths must stay relative (no leading slash) -->
 <script>(function(){var path=location.pathname,marker='/session/',i=path.indexOf(marker),p;i>=0?p=(path.slice(0,i+1)||'/'):p=(path.endsWith('/')?path:(path.replace(/\/[^\/]*$/,'/')||'/'));document.write('<base href="'+location.origin+p+'">');})()</script>
@@ -28,7 +28,7 @@
   <!-- ES module imports do not support the integrity= attribute (W3C limitation);    -->
   <!-- version is pinned in the vendored file path; hash documented above for audit. -->
   <script type="module">
-    import * as smd from 'static/vendor/smd.min.js';
+    import * as smd from './static/vendor/smd.min.js';
     // SRI verification happens at the ES module level via importmap or SW; pinning version in URL.
     // sha384 of smd.min.js @0.2.15: sha384-T6r95ocN9t3W8tUK2Fa6FPaO7bJryyjyW0WCalrUnpgtm2qXr5xcN4vwPYEJ6vHa
     window.smd = smd;
@@ -56,7 +56,7 @@
 </head>
 <body>
 <header class="app-titlebar" role="banner">
-  <button class="app-titlebar-hamburger" id="btnHamburger" onclick="toggleMobileSidebar()" type="button" title="Menu" aria-label="Menu">
+  <button class="app-titlebar-hamburger" id="btnHamburger" onclick="toggleMobileSidebar()" type="button" title="Menu" data-i18n-title="menu_hamburger" aria-label="Menu" data-i18n-aria-label="menu_hamburger">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
   </button>
   <div class="app-titlebar-inner">
@@ -74,24 +74,24 @@
         <circle cx="32" cy="10" r="4" fill="#F5C542"/>
       </svg>
     </span>
-    <span class="app-titlebar-title" id="appTitlebarTitle">Hermes</span>
+    <span class="app-titlebar-title" id="appTitlebarTitle">云千易</span>
     <span class="app-titlebar-sub" id="appTitlebarSub" hidden></span>
   </div>
   <div class="app-titlebar-spacer" aria-hidden="true"></div>
 </header>
 <div class="layout">
-  <nav class="rail" aria-label="Primary navigation">
+  <nav class="rail" aria-label="Primary navigation" data-i18n-aria-label="primary_nav_aria">
     <button class="rail-btn nav-tab active" data-panel="chat" onclick="switchPanel('chat')" title="Chat" data-i18n-title="tab_chat" aria-label="Chat"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
     <button class="rail-btn nav-tab" data-panel="tasks" onclick="switchPanel('tasks')" title="Tasks" data-i18n-title="tab_tasks" aria-label="Tasks"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>
-    <button class="rail-btn nav-tab" data-panel="kanban" onclick="switchPanel('kanban')" title="Kanban" data-i18n-title="tab_kanban" aria-label="Kanban"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16"/><path d="M16 4v16"/><path d="M3 10h18"/></svg></button>
+    <!-- <button class="rail-btn nav-tab" data-panel="kanban" onclick="switchPanel('kanban')" title="Kanban" data-i18n-title="tab_kanban" aria-label="Kanban"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16"/><path d="M16 4v16"/><path d="M3 10h18"/></svg></button> -->
     <button class="rail-btn nav-tab" data-panel="skills" onclick="switchPanel('skills')" title="Skills" data-i18n-title="tab_skills" aria-label="Skills"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></button>
     <button class="rail-btn nav-tab" data-panel="memory" onclick="switchPanel('memory')" title="Memory" data-i18n-title="tab_memory" aria-label="Memory"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2z"/></svg></button>
-    <button class="rail-btn nav-tab" data-panel="workspaces" onclick="switchPanel('workspaces')" title="Spaces" data-i18n-title="tab_workspaces" aria-label="Spaces"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></button>
-    <button class="rail-btn nav-tab" data-panel="profiles" onclick="switchPanel('profiles')" title="Agent profiles" data-i18n-title="tab_profiles" aria-label="Agent profiles"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></button>
+    <!-- <button class="rail-btn nav-tab" data-panel="workspaces" onclick="switchPanel('workspaces')" title="Spaces" data-i18n-title="tab_workspaces" aria-label="Spaces"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></button> -->
+    <!-- <button class="rail-btn nav-tab" data-panel="profiles" onclick="switchPanel('profiles')" title="Agent profiles" data-i18n-title="tab_profiles" aria-label="Agent profiles"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></button> -->
     <button class="rail-btn nav-tab" data-panel="todos" onclick="switchPanel('todos')" title="Current task list" data-i18n-title="tab_todos" aria-label="Todos"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg></button>
     <button class="rail-btn nav-tab" data-panel="insights" onclick="switchPanel('insights')" title="Insights" data-i18n-title="tab_insights" aria-label="Insights"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg></button>
-    <button class="rail-btn nav-tab dashboard-link" id="dashboardRailBtn" data-dashboard-link style="display:none" onclick="openHermesDashboard(event)" title="Hermes Dashboard" data-i18n-title="tab_dashboard" aria-label="Hermes Dashboard"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg><span class="dashboard-external-badge" aria-hidden="true"></span></button>
-    <button class="rail-btn nav-tab" data-panel="logs" onclick="switchPanel('logs')" title="Logs" data-i18n-title="tab_logs" aria-label="Logs"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h8"/><path d="M8 9h2"/></svg></button>
+    <button class="rail-btn nav-tab dashboard-link" id="dashboardRailBtn" data-dashboard-link style="display:none" onclick="openHermesDashboard(event)" title="云千易 Dashboard" data-i18n-title="tab_dashboard" aria-label="云千易 Dashboard"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg><span class="dashboard-external-badge" aria-hidden="true"></span></button>
+    <!-- <button class="rail-btn nav-tab" data-panel="logs" onclick="switchPanel('logs')" title="Logs" data-i18n-title="tab_logs" aria-label="Logs"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h8"/><path d="M8 9h2"/></svg></button> -->
     <div class="rail-spacer"></div>
     <button class="rail-btn nav-tab" data-panel="settings" onclick="switchPanel('settings')" title="Settings" data-i18n-title="tab_settings" aria-label="Settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
   </nav>
@@ -107,7 +107,7 @@
       <button class="nav-tab" data-panel="profiles" data-label="Profiles" onclick="switchPanel('profiles')" title="Agent profiles" data-i18n-title="tab_profiles"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></button>
       <button class="nav-tab" data-panel="todos" data-label="Todos" onclick="switchPanel('todos')" title="Current task list" data-i18n-title="tab_todos"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg></button>
       <button class="nav-tab" data-panel="insights" data-label="Insights" onclick="switchPanel('insights')" title="Insights" data-i18n-title="tab_insights"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg></button>
-      <button class="nav-tab dashboard-link" id="dashboardMobileBtn" data-dashboard-link data-label="Dashboard" style="display:none" onclick="openHermesDashboard(event)" title="Hermes Dashboard" data-i18n-title="tab_dashboard"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg><span class="dashboard-external-badge" aria-hidden="true"></span></button>
+      <button class="nav-tab dashboard-link" id="dashboardMobileBtn" data-dashboard-link data-label="Dashboard" style="display:none" onclick="openHermesDashboard(event)" title="云千易 Dashboard" data-i18n-title="tab_dashboard"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg><span class="dashboard-external-badge" aria-hidden="true"></span></button>
       <button class="nav-tab" data-panel="logs" data-label="Logs" onclick="switchPanel('logs')" title="Logs" data-i18n-title="tab_logs"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h8"/><path d="M8 9h2"/></svg></button>
       <!-- Settings button mirrored here for mobile (rail is desktop-only via @media >=768px). Keep in sync with rail entry. -->
       <button class="nav-tab" data-panel="settings" onclick="switchPanel('settings')" title="Settings" data-i18n-title="tab_settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -130,7 +130,7 @@
       <div class="panel-head">
         <span data-i18n="scheduled_jobs">Scheduled jobs</span>
         <div class="panel-head-actions">
-          <button class="panel-head-btn" id="cronRefreshBtn" onclick="loadCrons(true)" title="Refresh job list" aria-label="Refresh job list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
+          <button class="panel-head-btn" id="cronRefreshBtn" onclick="loadCrons(true)" title="Refresh job list" data-i18n-title="cron_refresh_list_title" aria-label="Refresh job list" data-i18n-aria-label="cron_refresh_list_title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
           <button class="panel-head-btn" onclick="openCronCreate()" title="New job" data-i18n-title="new_job" aria-label="New job"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
         </div>
       </div>
@@ -147,13 +147,13 @@
       </div>
       <div class="kanban-filter-stack">
         <div class="sidebar-search"><svg class="sidebar-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><input id="kanbanSearch" placeholder="Search tasks" data-i18n-placeholder="kanban_search_tasks" oninput="filterKanban()"></div>
-        <select id="kanbanAssigneeFilter" onchange="loadKanban(true)" aria-label="Assignee filter"></select>
-        <select id="kanbanTenantFilter" onchange="loadKanban(true)" aria-label="Tenant filter"></select>
+        <select id="kanbanAssigneeFilter" onchange="loadKanban(true)" data-i18n-aria-label="kanban_assignee_filter" aria-label="Assignee filter"></select>
+        <select id="kanbanTenantFilter" onchange="loadKanban(true)" data-i18n-aria-label="kanban_tenant_filter" aria-label="Tenant filter"></select>
         <label class="kanban-check"><input id="kanbanIncludeArchived" type="checkbox" onchange="loadKanban(true)"> <span data-i18n="kanban_include_archived">Include archived</span></label>
         <label class="kanban-check"><input id="kanbanOnlyMine" type="checkbox" onchange="loadKanban(true)"> <span data-i18n="kanban_only_mine">Only mine</span></label>
         <div id="kanbanStats" class="kanban-stats" aria-live="polite"></div>
         <div id="kanbanBulkBar" class="kanban-bulk-bar">
-          <select id="kanbanBulkStatus" aria-label="Bulk status"><option value="">Status</option><option value="ready">Ready</option><option value="running">Running</option><option value="blocked">Blocked</option><option value="done">Done</option><option value="archived">Archived</option></select>
+          <select id="kanbanBulkStatus" data-i18n-aria-label="kanban_bulk_status_aria" aria-label="Bulk status"><option value="" data-i18n="kanban_bulk_status_prompt">Status</option><option value="ready" data-i18n="kanban_status_ready">Ready</option><option value="running" data-i18n="kanban_status_running">Running</option><option value="blocked" data-i18n="kanban_status_blocked">Blocked</option><option value="done" data-i18n="kanban_status_done">Done</option><option value="archived" data-i18n="kanban_status_archived">Archived</option></select>
           <button class="btn secondary" onclick="bulkUpdateKanban()" data-i18n="kanban_bulk_action">Bulk action</button>
           <button class="btn secondary" onclick="nudgeKanbanDispatcher()" data-i18n="kanban_nudge_dispatcher">Nudge dispatcher</button>
         </div>
@@ -195,15 +195,15 @@
       <div class="panel-head">
         <span data-i18n="tab_insights">Insights</span>
         <div class="panel-head-actions">
-          <button class="panel-head-btn" id="insightsRefreshBtn" onclick="loadInsights(true)" title="Refresh" aria-label="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
+          <button class="panel-head-btn" id="insightsRefreshBtn" onclick="loadInsights(true)" title="Refresh" data-i18n-title="insights_refresh_title" aria-label="Refresh" data-i18n-aria-label="insights_refresh_title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
         </div>
       </div>
       <div class="panel-head-sub" style="padding:0 12px 8px">
         <select id="insightsPeriod" onchange="loadInsights()" style="width:100%;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px">
-          <option value="7">7 days</option>
-          <option value="30" selected>30 days</option>
-          <option value="90">90 days</option>
-          <option value="365">365 days</option>
+          <option value="7" data-i18n="insights_period_7">7 days</option>
+          <option value="30" selected data-i18n="insights_period_30">30 days</option>
+          <option value="90" data-i18n="insights_period_90">90 days</option>
+          <option value="365" data-i18n="insights_period_365">365 days</option>
         </select>
       </div>
     </div>
@@ -263,28 +263,28 @@
       <div class="side-menu" id="settingsMenu">
         <button type="button" class="side-menu-item active" data-settings-section="conversation" onclick="switchSettingsSection('conversation')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          <span>Conversation</span>
+          <span data-i18n="settings_tab_conversation">Conversation</span>
         </button>
         <button type="button" class="side-menu-item" data-settings-section="appearance" onclick="switchSettingsSection('appearance')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-          <span>Appearance</span>
+          <span data-i18n="settings_tab_appearance">Appearance</span>
         </button>
         <button type="button" class="side-menu-item" data-settings-section="preferences" onclick="switchSettingsSection('preferences')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
-          <span>Preferences</span>
+          <span data-i18n="settings_tab_preferences">Preferences</span>
         </button>
-        <button type="button" class="side-menu-item" data-settings-section="providers" onclick="switchSettingsSection('providers')">
+        <!-- <button type="button" class="side-menu-item" data-settings-section="providers" onclick="switchSettingsSection('providers')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
           <span data-i18n="providers_tab_title">Providers</span>
         </button>
         <button type="button" class="side-menu-item" data-settings-section="plugins" onclick="switchSettingsSection('plugins')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l3 7h7l-5.5 4.3 2.1 7L12 16.2 5.4 20.3l2.1-7L2 9h7z"/></svg>
-          <span>Plugins</span>
+          <span data-i18n="settings_tab_plugins">Plugins</span>
         </button>
         <button type="button" class="side-menu-item" data-settings-section="system" onclick="switchSettingsSection('system')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><line x1="6" y1="7" x2="6.01" y2="7"/><line x1="6" y1="17" x2="6.01" y2="17"/></svg>
-          <span>System</span>
-        </button>
+          <span data-i18n="settings_tab_system">System</span>
+        </button> -->
       </div>
     </div>
   <div class="resize-handle" id="sidebarResize"></div>
@@ -292,9 +292,9 @@
   <main class="main">
     <div id="mainChat" class="main-view">
     <div class="messages" id="messages">
-      <button id="scrollToBottomBtn" class="scroll-to-bottom-btn" aria-label="Scroll to bottom" onclick="scrollToBottom()" style="display:none">↓</button>
+      <button id="scrollToBottomBtn" class="scroll-to-bottom-btn" aria-label="Scroll to bottom" data-i18n-aria-label="scroll_to_bottom_aria" onclick="scrollToBottom()" style="display:none">↓</button>
       <div class="empty-state" id="emptyState">
-        <div class="empty-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="80" height="80" aria-label="Hermes caduceus">
+        <div class="empty-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="80" height="80" aria-label="云千易">
           <defs>
             <linearGradient id="hermes-gold" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" style="stop-color:#F5C542;stop-opacity:1"/>
@@ -314,9 +314,9 @@
         <h2 data-i18n="empty_title">What can I help with?</h2>
         <p data-i18n="empty_subtitle">Ask anything, run commands, explore files, or manage your scheduled tasks.</p>
         <div class="suggestion-grid">
-          <button class="suggestion" data-msg="What files are in this workspace?"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> <span data-i18n="suggest_files">What files are in this workspace?</span></button>
-          <button class="suggestion" data-msg="What's on my schedule today?"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="12" y2="16"/></svg> <span data-i18n="suggest_schedule">What's on my schedule today?</span></button>
-          <button class="suggestion" data-msg="Help me plan a small project."><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg> <span data-i18n="suggest_plan">Help me plan a small project.</span></button>
+          <button class="suggestion" data-msg="这个工作区有哪些文件?"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> <span data-i18n="suggest_files">What files are in this workspace?</span></button>
+          <button class="suggestion" data-msg="今天有什么安排?"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="12" y2="16"/></svg> <span data-i18n="suggest_schedule">What's on my schedule today?</span></button>
+          <button class="suggestion" data-msg="帮我规划一个小项目。"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg> <span data-i18n="suggest_plan">Help me plan a small project.</span></button>
         </div>
       </div>
       <div class="messages-inner" id="msgInner"></div>
@@ -326,33 +326,33 @@
     <div class="update-banner" id="updateBanner">
       <div style="display:flex;flex-direction:column;flex:1;min-width:0">
         <span id="updateMsg"></span>
-        <a id="updateWhatsNew" href="#" target="_blank" rel="noopener" style="font-size:11px;color:var(--accent);text-decoration:underline;display:none;margin-left:8px;white-space:nowrap">What's new?</a>
+        <a id="updateWhatsNew" href="#" target="_blank" rel="noopener" style="font-size:11px;color:var(--accent);text-decoration:underline;display:none;margin-left:8px;white-space:nowrap" data-i18n="update_whats_new">What's new?</a>
         <div id="updateError" style="display:none;font-size:12px;color:var(--error,#e05);margin-top:4px;word-break:break-word"></div>
       </div>
       <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap">
-        <button class="update-btn" onclick="dismissUpdate()">Later</button>
-        <button class="update-btn update-primary" id="btnApplyUpdate" onclick="applyUpdates()">Update Now</button>
-        <button class="update-btn" id="btnForceUpdate" style="display:none;background:var(--error,#e05);color:#fff;border-color:var(--error,#e05)" onclick="forceUpdate(this)">Force update</button>
+        <button class="update-btn" onclick="dismissUpdate()" data-i18n="update_later">Later</button>
+        <button class="update-btn update-primary" id="btnApplyUpdate" onclick="applyUpdates()" data-i18n="update_now">Update Now</button>
+        <button class="update-btn" id="btnForceUpdate" style="display:none;background:var(--error,#e05);color:#fff;border-color:var(--error,#e05)" onclick="forceUpdate(this)" data-i18n="update_force">Force update</button>
       </div>
     </div>
     <div class="reconnect-banner" id="reconnectBanner">
-      <span id="reconnectMsg"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> A response may have been in progress when you last left. Reload messages?</span>
+      <span id="reconnectMsg"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> <span data-i18n="reconnect_finished">A response may have been in progress when you last left. Messages may have updated.</span></span>
       <div style="display:flex;gap:8px;flex-shrink:0">
-        <button class="reconnect-btn" onclick="dismissReconnect()">Dismiss</button>
-        <button class="reconnect-btn" onclick="refreshSession()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-1px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Reload</button>
+        <button class="reconnect-btn" onclick="dismissReconnect()" data-i18n="reconnect_dismiss">Dismiss</button>
+        <button class="reconnect-btn" onclick="refreshSession()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-1px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> <span data-i18n="reconnect_reload">Reload</span></button>
       </div>
     </div>
     <div class="agent-health-banner" id="agentHealthBanner" role="alert" aria-live="assertive" hidden>
       <div class="agent-health-copy">
-        <strong id="agentHealthTitle">Hermes agent is not responding</strong>
-        <span id="agentHealthDetails">The gateway heartbeat failed. Messages may not be delivered until it comes back.</span>
+        <strong id="agentHealthTitle">云千易助手未响应</strong>
+        <span id="agentHealthDetails" data-i18n="agent_health_details">The gateway heartbeat failed. Messages may not be delivered until it comes back.</span>
       </div>
-      <button class="agent-health-dismiss" id="agentHealthDismiss" type="button" onclick="dismissAgentHealthAlert()" aria-label="Dismiss Hermes agent heartbeat alert">Dismiss</button>
+      <button class="agent-health-dismiss" id="agentHealthDismiss" type="button" onclick="dismissAgentHealthAlert()" aria-label="关闭云千易心跳提示" data-i18n="agent_health_dismiss">Dismiss</button>
     </div>
     <div class="composer-wrap" id="composerWrap">
       <div class="composer-flyout">
       <!-- Queue flyout: slides up from behind composer, same pattern as approval-card -->
-      <div id="queueCard" class="queue-card" role="region" aria-label="Queued messages" aria-live="polite">
+      <div id="queueCard" class="queue-card" role="region" aria-label="Queued messages" data-i18n-aria-label="queue_region_aria" aria-live="polite">
         <div id="queueChips" class="queue-card-inner"></div>
       </div>
       <div class="approval-card" id="approvalCard" role="alertdialog" aria-labelledby="approvalHeading" aria-describedby="approvalDesc">
@@ -423,7 +423,7 @@
             </div>
           </div>
           <div class="composer-terminal-viewport" id="terminalViewport" onclick="focusComposerTerminalInput()">
-            <div class="composer-terminal-surface" id="terminalSurface" aria-label="Workspace terminal"></div>
+            <div class="composer-terminal-surface" id="terminalSurface" aria-label="Workspace terminal" data-i18n-aria-label="workspace_terminal_aria"></div>
           </div>
         </div>
         <div class="composer-terminal-dock" id="composerTerminalDock" hidden>
@@ -443,25 +443,25 @@
       </div>
       <!-- Queue pill outer: same positioning wrapper as .queue-card (max-width + padding) -->
       <div class="queue-pill-outer">
-        <button id="queuePill" class="queue-pill" aria-label="Show queued messages" type="button"></button>
+        <button id="queuePill" class="queue-pill" aria-label="Show queued messages" data-i18n-aria-label="queue_pill_aria" type="button"></button>
       </div>
       <div class="composer-box" id="composerBox">
         <div class="cmd-dropdown" id="cmdDropdown"></div>
         <div class="drop-hint" id="dropHint">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          Drop files to upload to workspace
+          <span data-i18n="drop_files_hint">Drop files here to upload to workspace</span>
         </div>
         <div class="attach-tray" id="attachTray"></div>
-        <div class="mic-status" id="micStatus" style="display:none"><span class="mic-dot"></span> Listening…</div>
+        <div class="mic-status" id="micStatus" style="display:none"><span class="mic-dot"></span> <span data-i18n="voice_listening">Listening…</span></div>
         <div class="voice-mode-bar" id="voiceModeBar" style="display:none">
           <span class="voice-mode-indicator" id="voiceModeIndicator"></span>
           <span class="voice-mode-label" id="voiceModeLabel"></span>
         </div>
-        <textarea id="msg" rows="1" placeholder="Message Hermes…"></textarea>
+        <textarea id="msg" rows="1" placeholder="对话 云千易…"></textarea>
         <div class="composer-footer">
           <div class="composer-left">
             <input type="file" id="fileInput" multiple accept="image/*,text/*,application/pdf,application/json,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.md,.py,.js,.ts,.yaml,.yml,.toml,.csv,.sh,.txt,.log,.env,.xls,.xlsx,.doc,.docx,.zip,.tar,.gz,.tgz,.bz2,.xz" style="display:none">
-            <button class="icon-btn" id="btnAttach" title="Attach files">
+            <button class="icon-btn" id="btnAttach" title="Attach files" data-i18n-title="composer_attach" aria-label="Attach files" data-i18n-aria-label="composer_attach">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
             </button>
             <button class="icon-btn mic-btn" id="btnMic" title="Dictate" data-i18n-title="voice_dictate" style="display:none">
@@ -488,67 +488,76 @@
               <span class="yolo-pill-icon" aria-hidden="true">⚡</span>
               <span class="yolo-pill-label" data-i18n="yolo_pill_label">YOLO</span>
             </button>
-            <div id="profileChipWrap" class="composer-profile-wrap">
+
+            <!-- 隐藏用户配置 -->
+            <!-- <div id="profileChipWrap" class="composer-profile-wrap">
               <button class="composer-profile-chip profile-chip" id="profileChip" type="button" onclick="toggleProfileDropdown()" title="Switch profile">
                 <span class="composer-profile-icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
                 <span class="composer-profile-label" id="profileChipLabel">default</span>
                 <span class="composer-profile-chevron" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
               </button>
-            </div>
+            </div> -->
             <div class="composer-ws-wrap">
-              <div class="composer-workspace-group ws-chip" id="composerWorkspaceGroup" role="group" aria-label="Workspace controls">
-                <button class="composer-workspace-files-btn" id="btnWorkspacePanelToggle" type="button" onclick="toggleWorkspacePanel()" title="Show workspace panel" aria-pressed="false" aria-label="Toggle workspace files panel">
+              <div class="composer-workspace-group ws-chip" id="composerWorkspaceGroup" role="group" aria-label="Workspace controls" data-i18n-aria-label="composer_workspace_group_aria">
+                <button class="composer-workspace-files-btn" id="btnWorkspacePanelToggle" type="button" onclick="toggleWorkspacePanel()" title="Workspace" data-i18n-title="composer_workspace_toggle_label" aria-pressed="true">
                   <span class="composer-workspace-icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
+                  <span class="composer-workspace-label" data-i18n="composer_workspace_toggle_label">Workspace</span>
                 </button>
-                <button class="composer-workspace-chip" id="composerWorkspaceChip" type="button" onclick="toggleComposerWsDropdown()" title="Switch workspace" disabled>
+                <!-- <button class="composer-workspace-chip" id="composerWorkspaceChip" type="button" onclick="toggleComposerWsDropdown()" title="Switch workspace" disabled>
                   <span class="composer-workspace-label" id="composerWorkspaceLabel"></span>
                   <span class="composer-workspace-chevron" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
-                </button>
+                </button> -->
               </div>
             </div>
-            <button class="icon-btn composer-mobile-config-btn" id="composerMobileConfigBtn" type="button" onclick="toggleMobileComposerConfig()" title="Workspace, model, reasoning, and context settings" aria-label="Workspace, model, reasoning, and context settings" aria-haspopup="true" aria-expanded="false" aria-controls="composerMobileConfigPanel">
+            <button class="icon-btn composer-mobile-config-btn" id="composerMobileConfigBtn" type="button" onclick="toggleMobileComposerConfig()" title="Workspace, model, reasoning, and context settings" data-i18n-title="composer_mobile_config_title" aria-label="Workspace, model, reasoning, and context settings" data-i18n-aria-label="composer_mobile_config_title" aria-haspopup="true" aria-expanded="false" aria-controls="composerMobileConfigPanel">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
               <span class="composer-mobile-ctx-badge" id="composerMobileCtxBadge" aria-hidden="true" style="display:none">0</span>
             </button>
             <div class="composer-model-wrap">
-              <button class="composer-model-chip" id="composerModelChip" type="button" onclick="toggleModelDropdown()" title="Conversation model">
+              <!-- Was: clickable model chip + dropdown toggle (disabled — read-only label only).
+              <button class="composer-model-chip" id="composerModelChip" type="button" onclick="toggleModelDropdown()" title="Conversation model" data-i18n-title="model_select_title">
                 <span class="composer-model-icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg></span>
                 <span class="composer-model-label" id="composerModelLabel"></span>
                 <span class="composer-model-chevron" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
               </button>
-              <select id="modelSelect" class="composer-model-select" title="Conversation model" aria-hidden="true" tabindex="-1">
-              <optgroup label="OpenAI">
-                <option value="openai/gpt-5.4-mini">GPT-5.4 Mini</option>
-                <option value="openai/gpt-4o">GPT-4o</option>
-                <option value="openai/o3">o3</option>
-                <option value="openai/o4-mini">o4-mini</option>
-              </optgroup>
-              <optgroup label="Anthropic">
-                <option value="anthropic/claude-sonnet-4.6">Claude Sonnet 4.6</option>
-                <option value="anthropic/claude-sonnet-4-5">Claude Sonnet 4.5</option>
-                <option value="anthropic/claude-haiku-3-5">Claude Haiku 3.5</option>
-              </optgroup>
-              <optgroup label="Other">
-                <option value="google/gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
-                <option value="google/gemini-3-flash-preview">Gemini 3 Flash Preview</option>
-                <option value="deepseek/deepseek-v4-flash">DeepSeek V4 Flash</option>
-                <option value="deepseek/deepseek-v4-pro">DeepSeek V4 Pro</option>
-                <option value="deepseek/deepseek-chat-v3-0324">DeepSeek V3 (legacy)</option>
-                <option value="meta-llama/llama-4-scout">Llama 4 Scout</option>
-              </optgroup>
-            </select>
+              -->
+              <div class="composer-model-chip composer-model-chip--display-only" id="composerModelChip" title="Conversation model" data-i18n-title="model_select_title">
+                <span class="composer-model-icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg></span>
+                <span class="composer-model-label" id="composerModelLabel"></span>
+              </div>
+              <select id="modelSelect" class="composer-model-select" title="Conversation model" data-i18n-title="model_select_title" aria-hidden="true" tabindex="-1">
+                <optgroup label="OpenAI">
+                  <option value="openai/gpt-5.4-mini">GPT-5.4 Mini</option>
+                  <option value="openai/gpt-4o">GPT-4o</option>
+                  <option value="openai/o3">o3</option>
+                  <option value="openai/o4-mini">o4-mini</option>
+                </optgroup>
+                <optgroup label="Anthropic">
+                  <option value="anthropic/claude-sonnet-4.6">Claude Sonnet 4.6</option>
+                  <option value="anthropic/claude-sonnet-4-5">Claude Sonnet 4.5</option>
+                  <option value="anthropic/claude-haiku-3-5">Claude Haiku 3.5</option>
+                </optgroup>
+                <optgroup label="Other">
+                  <option value="google/gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
+                  <option value="google/gemini-3-flash-preview">Gemini 3 Flash Preview</option>
+                  <option value="deepseek/deepseek-v4-flash">DeepSeek V4 Flash</option>
+                  <option value="deepseek/deepseek-v4-pro">DeepSeek V4 Pro</option>
+                  <option value="deepseek/deepseek-chat-v3-0324">DeepSeek V3 (legacy)</option>
+                  <option value="meta-llama/llama-4-scout">Llama 4 Scout</option>
+                </optgroup>
+              </select>
             </div>
             <div class="composer-reasoning-wrap" id="composerReasoningWrap" style="display:none">
-              <button class="composer-reasoning-chip" id="composerReasoningChip" type="button" onclick="toggleReasoningDropdown()" title="Reasoning effort level">
+              <button class="composer-reasoning-chip" id="composerReasoningChip" type="button" onclick="toggleReasoningDropdown()" title="Reasoning effort level" data-i18n-title="reasoning_effort_title">
                 <span class="composer-reasoning-icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/></svg></span>
                 <span class="composer-reasoning-label" id="composerReasoningLabel"></span>
                 <span class="composer-reasoning-chevron" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
               </button>
             </div>
             <div class="composer-toolsets-wrap" id="composerToolsetsWrap">
-              <button class="composer-toolsets-chip" id="composerToolsetsChip" type="button" onclick="toggleToolsetsDropdown()" title="Session toolsets">
+              <button class="composer-toolsets-chip" id="composerToolsetsChip" type="button" onclick="toggleToolsetsDropdown()" title="Session toolsets" data-i18n-title="session_toolsets">
                 <span class="composer-toolsets-icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
-                <span class="composer-toolsets-label" id="composerToolsetsLabel">Global</span>
+                <span class="composer-toolsets-label" id="composerToolsetsLabel" data-i18n="session_toolsets_global">Global</span>
                 <span class="composer-toolsets-chevron" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
               </button>
             </div>
@@ -556,7 +565,7 @@
           <div class="composer-right">
             <span class="composer-status" id="composerStatus" style="display:none"></span>
             <div class="ctx-indicator-wrap" id="ctxIndicatorWrap" style="display:none">
-              <button class="ctx-indicator" id="ctxIndicator" type="button" aria-label="Context window usage" aria-describedby="ctxTooltip">
+              <button class="ctx-indicator" id="ctxIndicator" type="button" aria-label="Context window usage" data-i18n-aria-label="ctx_indicator_aria" aria-describedby="ctxTooltip">
                 <span class="ctx-ring">
                   <svg class="ctx-ring-svg" viewBox="0 0 24 24" aria-hidden="true">
                     <circle class="ctx-ring-track" cx="12" cy="12" r="9.75"></circle>
@@ -566,7 +575,7 @@
                 </span>
               </button>
               <div class="ctx-tooltip" id="ctxTooltip" role="tooltip" aria-hidden="true">
-                <div class="ctx-tooltip-title">Context window</div>
+                <div class="ctx-tooltip-title" data-i18n="ctx_tooltip_title">Context window</div>
                 <div class="ctx-tooltip-line" id="ctxTooltipUsage"></div>
                 <div class="ctx-tooltip-line" id="ctxTooltipTokens"></div>
                 <div class="ctx-tooltip-line" id="ctxTooltipThreshold"></div>
@@ -576,25 +585,31 @@
                 </div>
               </div>
             </div>
-            <span class="bg-badge" id="bgBadge" style="display:none" title="Background tasks running">0</span>
-            <button class="send-btn" id="btnSend" title="Send message" disabled>
+            <span class="bg-badge" id="bgBadge" style="display:none" title="Background tasks running" data-i18n-title="bg_badge_title">0</span>
+            <button class="send-btn" id="btnSend" title="Send message" data-i18n-title="composer_send" disabled>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
             </button>
           </div>
-          <div class="composer-mobile-config-panel" id="composerMobileConfigPanel" aria-label="Workspace, model, reasoning, and context settings">
-            <button class="composer-mobile-config-action" id="composerMobileWorkspaceAction" type="button" onclick="toggleComposerWsDropdown()" title="Switch workspace">
+          <div class="composer-mobile-config-panel" id="composerMobileConfigPanel" aria-label="Workspace, model, reasoning, and context settings" data-i18n-aria-label="composer_mobile_config_title">
+            <button class="composer-mobile-config-action" id="composerMobileWorkspaceAction" type="button" onclick="toggleComposerWsDropdown()" title="Switch workspace" data-i18n-title="workspace_switch_prompt_title">
               <span class="composer-workspace-icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
               <span class="composer-mobile-config-copy"><span class="composer-mobile-config-kicker" data-i18n="composer_mobile_workspace">Workspace</span><span class="composer-mobile-config-value" id="composerMobileWorkspaceLabel"></span></span>
             </button>
-            <button class="composer-mobile-config-action" id="composerMobileModelAction" type="button" onclick="toggleModelDropdown()" title="Conversation model">
+            <!-- Was: mobile overflow row opened model dropdown.
+            <button class="composer-mobile-config-action" id="composerMobileModelAction" type="button" onclick="toggleModelDropdown()" title="Conversation model" data-i18n-title="model_select_title">
               <span class="composer-model-icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg></span>
               <span class="composer-mobile-config-copy"><span class="composer-mobile-config-kicker" data-i18n="composer_mobile_model">Model</span><span class="composer-mobile-config-value" id="composerMobileModelLabel"></span></span>
             </button>
-            <button class="composer-mobile-config-action" id="composerMobileReasoningAction" type="button" onclick="toggleReasoningDropdown()" title="Reasoning effort level" style="display:none">
+            -->
+            <div class="composer-mobile-config-action composer-mobile-model-display-only" id="composerMobileModelAction" title="Conversation model" data-i18n-title="model_select_title" role="group">
+              <span class="composer-model-icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg></span>
+              <span class="composer-mobile-config-copy"><span class="composer-mobile-config-kicker" data-i18n="composer_mobile_model">Model</span><span class="composer-mobile-config-value" id="composerMobileModelLabel"></span></span>
+            </div>
+            <button class="composer-mobile-config-action" id="composerMobileReasoningAction" type="button" onclick="toggleReasoningDropdown()" title="Reasoning effort level" data-i18n-title="reasoning_effort_title" style="display:none">
               <span class="composer-reasoning-icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/></svg></span>
               <span class="composer-mobile-config-copy"><span class="composer-mobile-config-kicker" data-i18n="composer_mobile_reasoning">Reasoning</span><span class="composer-mobile-config-value" id="composerMobileReasoningLabel"></span></span>
             </button>
-            <div class="composer-mobile-config-action composer-mobile-context-action" id="composerMobileContextAction" role="group" aria-label="Context window" style="display:none">
+            <div class="composer-mobile-config-action composer-mobile-context-action" id="composerMobileContextAction" role="group" aria-label="Context window" data-i18n-aria-label="ctx_tooltip_title" style="display:none">
               <span class="composer-mobile-config-copy composer-mobile-context-copy">
                 <span class="composer-mobile-config-kicker" data-i18n="composer_mobile_context">Context</span>
                 <span class="composer-mobile-config-value" id="composerMobileContextUsage"></span>
@@ -608,12 +623,13 @@
           <div class="profile-dropdown" id="profileDropdown"></div>
           <div class="ws-dropdown ws-dropdown-footer" id="composerWsDropdown"></div>
           <div class="composer-reasoning-dropdown" id="composerReasoningDropdown">
-            <div class="reasoning-option" data-effort="none">None</div>
-            <div class="reasoning-option" data-effort="minimal">Minimal</div>
-            <div class="reasoning-option" data-effort="low">Low</div>
-            <div class="reasoning-option" data-effort="medium">Medium</div>
-            <div class="reasoning-option" data-effort="high">High</div>
-            <div class="reasoning-option" data-effort="xhigh">Extra High</div>
+            <div class="reasoning-option" data-effort="default" data-i18n="reasoning_effort_default">Default</div>
+            <div class="reasoning-option" data-effort="none" data-i18n="reasoning_effort_none">None</div>
+            <div class="reasoning-option" data-effort="minimal" data-i18n="reasoning_effort_minimal">Minimal</div>
+            <div class="reasoning-option" data-effort="low" data-i18n="reasoning_effort_low">Low</div>
+            <div class="reasoning-option" data-effort="medium" data-i18n="reasoning_effort_medium">Medium</div>
+            <div class="reasoning-option" data-effort="high" data-i18n="reasoning_effort_high">High</div>
+            <div class="reasoning-option" data-effort="xhigh" data-i18n="reasoning_effort_xhigh">Extra high</div>
           </div>
           <div class="composer-toolsets-dropdown" id="composerToolsetsDropdown">
             <div class="toolsets-dropdown-desc" id="toolsetsDropdownDesc"></div>
@@ -622,11 +638,13 @@
               <input type="text" id="toolsetsInput" class="toolsets-input" placeholder="" autocomplete="off">
             </div>
             <div class="toolsets-dropdown-actions">
-              <button type="button" class="toolsets-action-btn toolsets-apply-btn" id="toolsetsApplyBtn">Apply</button>
-              <button type="button" class="toolsets-action-btn toolsets-clear-btn" id="toolsetsClearBtn">Clear (global)</button>
+              <button type="button" class="toolsets-action-btn toolsets-apply-btn" id="toolsetsApplyBtn" data-i18n="session_toolsets_apply">Apply</button>
+              <button type="button" class="toolsets-action-btn toolsets-clear-btn" id="toolsetsClearBtn" data-i18n="session_toolsets_clear">Clear (global)</button>
             </div>
           </div>
+          <!-- Was: model dropdown mount (renderModelDropdown fills this). Kept commented — picker disabled.
           <div class="model-dropdown" id="composerModelDropdown"></div>
+          -->
         </div>
         <div class="upload-bar-wrap" id="uploadBarWrap"><div class="upload-bar" id="uploadBar"></div></div>
       </div>
@@ -784,9 +802,9 @@
             </div>
             <div class="hermes-action-grid">
               <button class="settings-action-btn" id="btnDownload" title="Download as Markdown" data-i18n-title="download_transcript"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> <span data-i18n="transcript">Transcript</span></button>
-              <button class="settings-action-btn" id="btnExportJSON" title="Export full session as JSON"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/><path d="M16 3h1a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2 2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1"/></svg> JSON</button>
-              <button class="settings-action-btn" id="btnImportJSON" title="Import session from JSON"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> <span data-i18n="import">Import</span></button>
-              <button class="settings-action-btn danger" id="btnClearConvModal" onclick="clearConversation()" title="Clear all messages in this conversation"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 1 2 2 2v2"/></svg> Clear</button>
+              <button class="settings-action-btn" id="btnExportJSON" title="Export full session as JSON" data-i18n-title="settings_export_json_title"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/><path d="M16 3h1a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2 2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1"/></svg> <span data-i18n="settings_action_export_json">JSON</span></button>
+              <button class="settings-action-btn" id="btnImportJSON" title="Import session from JSON" data-i18n-title="settings_import_json_title"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> <span data-i18n="import">Import</span></button>
+              <button class="settings-action-btn danger" id="btnClearConvModal" onclick="clearConversation()" title="Clear all messages in this conversation" data-i18n-title="settings_clear_conv_title"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 1 2 2 2v2"/></svg> <span data-i18n="settings_action_clear">Clear</span></button>
             </div>
             <input type="file" id="importFileInput" accept=".json" style="display:none">
           </div>
@@ -804,19 +822,19 @@
                   <div style="width:100%;height:40px;border-radius:6px;background:#fff;border:1px solid rgba(0,0,0,.12);margin-bottom:6px;display:flex;align-items:center;justify-content:center">
                     <svg width="16" height="16" fill="none" stroke="#999" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
                   </div>
-                  <span style="font-size:12px;font-weight:500;color:var(--text)">Light</span>
+                  <span style="font-size:12px;font-weight:500;color:var(--text)" data-i18n="settings_theme_light">Light</span>
                 </button>
                 <button type="button" data-theme-val="dark" onclick="_pickTheme('dark')" class="theme-pick-btn" style="border:1px solid var(--border2);border-radius:10px;padding:10px 8px;text-align:center;cursor:pointer;background:none;transition:all .15s">
                   <div style="width:100%;height:40px;border-radius:6px;background:#1a1a2e;border:1px solid rgba(255,255,255,.1);margin-bottom:6px;display:flex;align-items:center;justify-content:center">
                     <svg width="16" height="16" fill="none" stroke="#666" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/></svg>
                   </div>
-                  <span style="font-size:12px;font-weight:500;color:var(--text)">Dark</span>
+                  <span style="font-size:12px;font-weight:500;color:var(--text)" data-i18n="settings_theme_dark">Dark</span>
                 </button>
                 <button type="button" data-theme-val="system" onclick="_pickTheme('system')" class="theme-pick-btn" style="border:1px solid var(--border2);border-radius:10px;padding:10px 8px;text-align:center;cursor:pointer;background:none;transition:all .15s">
                   <div style="width:100%;height:40px;border-radius:6px;background:linear-gradient(to right,#fff,#1a1a2e);border:1px solid rgba(0,0,0,.12);margin-bottom:6px;display:flex;align-items:center;justify-content:center">
                     <svg width="16" height="16" fill="none" stroke="#888" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
                   </div>
-                  <span style="font-size:12px;font-weight:500;color:var(--text)">System</span>
+                  <span style="font-size:12px;font-weight:500;color:var(--text)" data-i18n="settings_theme_system">System</span>
                 </button>
               </div>
               <input type="hidden" id="settingsTheme" value="dark">
@@ -864,19 +882,19 @@
             <div class="settings-section-head">
               <div>
                 <div class="settings-section-title" data-i18n="settings_section_preferences_title">Preferences</div>
-                <div class="settings-section-meta" data-i18n="settings_section_preferences_meta">Defaults and UI behavior for Hermes Web UI.</div>
+                <div class="settings-section-meta" data-i18n="settings_section_preferences_meta">Defaults and UI behavior for 云千易 Web UI.</div>
               </div>
             </div>
-            <div class="settings-field">
+            <!-- <div class="settings-field">
               <label for="settingsModel" data-i18n="settings_label_model">Default Model</label>
               <select id="settingsModel" style="width:100%;padding:8px;background:var(--code-bg);color:var(--text);border:1px solid var(--border2);border-radius:6px"></select>
               <div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="settings_desc_model">Used for new conversations. Existing conversations keep their selected model.</div>
-            </div>
+            </div> -->
             <div class="settings-field">
               <label for="settingsSendKey" data-i18n="settings_label_send_key">Send Key</label>
               <select id="settingsSendKey" style="width:100%;padding:8px;background:var(--code-bg);color:var(--text);border:1px solid var(--border2);border-radius:6px">
-                <option value="enter">Enter (Shift+Enter for newline)</option>
-                <option value="ctrl+enter">Ctrl+Enter (Enter for newline)</option>
+                <option value="enter" data-i18n="settings_send_key_enter">Enter (Shift+Enter for newline)</option>
+                <option value="ctrl+enter" data-i18n="settings_send_key_ctrl_enter">Ctrl+Enter (Enter for newline)</option>
               </select>
             </div>
             <div class="settings-field">
@@ -909,12 +927,12 @@
                 <input type="checkbox" id="settingsVoiceModeEnabled" style="width:15px;height:15px;accent-color:var(--accent)">
                 <span data-i18n="settings_label_voice_mode">Hands-free voice mode button</span>
               </label>
-              <div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="settings_desc_voice_mode">Show the voice-mode button (audio waveform) next to the dictation mic. Lets you speak naturally — Hermes auto-sends after a pause and reads replies aloud. Requires a browser that supports both speech recognition and TTS.</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="settings_desc_voice_mode">Show the voice-mode button (audio waveform) next to the dictation mic. Lets you speak naturally — 云千易 auto-sends after a pause and reads replies aloud. Requires a browser that supports both speech recognition and TTS.</div>
             </div>
             <div class="settings-field">
               <label for="settingsTtsVoice" data-i18n="settings_label_tts_voice">Voice</label>
               <select id="settingsTtsVoice" style="width:100%;padding:8px;background:var(--code-bg);color:var(--text);border:1px solid var(--border2);border-radius:6px">
-                <option value="">Default system voice</option>
+                <option value="" data-i18n="settings_tts_voice_default">Default system voice</option>
               </select>
               <div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="settings_desc_tts_voice">Preferred voice. Populated from your browser's available voices.</div>
             </div>
@@ -949,24 +967,24 @@
             <div class="settings-field">
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
                 <input type="checkbox" id="settingsShowTps" style="width:15px;height:15px;accent-color:var(--accent)">
-                <span>Show token speed (TPS)</span>
+                <span data-i18n="settings_label_show_tps">Show token speed (TPS)</span>
               </label>
-              <div style="font-size:11px;color:var(--muted);margin-top:4px">Displays tokens per second in assistant message headers while streaming and after a response completes. Off by default.</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="settings_desc_show_tps">Displays tokens per second in assistant message headers while streaming and after a response completes. Off by default.</div>
             </div>
             <div class="settings-field">
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
                 <input type="checkbox" id="settingsSimplifiedToolCalling" style="width:15px;height:15px;accent-color:var(--accent)">
-                <span>Compact tool activity</span>
+                <span data-i18n="settings_label_simplified_tool_calling">Compact tool activity</span>
               </label>
-              <div style="font-size:11px;color:var(--muted);margin-top:4px">Group thinking and tool calls into one collapsed activity section per assistant turn.</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="settings_desc_simplified_tool_calling">Group thinking and tool calls into one collapsed activity section per assistant turn.</div>
             </div>
-            <div class="settings-field">
+            <!-- <div class="settings-field">
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
                 <input type="checkbox" id="settingsApiRedact" checked style="width:15px;height:15px;accent-color:var(--accent)">
                 <span data-i18n="settings_label_api_redact">Redact sensitive data in API responses</span>
               </label>
               <div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="settings_desc_api_redact">Self-hosted users can disable for transparency (not recommended for shared instances).</div>
-            </div>
+            </div> -->
             <div class="settings-field">
               <label for="settingsSidebarDensity" data-i18n="settings_label_sidebar_density">Sidebar density</label>
               <select id="settingsSidebarDensity" style="width:100%;padding:8px;background:var(--code-bg);color:var(--text);border:1px solid var(--border2);border-radius:6px">
@@ -994,7 +1012,7 @@
               </select>
               <div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="settings_desc_busy_input_mode">Controls what happens when you send a message while the agent is running. Queue waits for the current task; Interrupt cancels and starts fresh; Steer injects a mid-turn correction without interrupting (falls back to interrupt when the agent is not yet cached or the stream has ended).</div>
             </div>
-            <div class="settings-field">
+            <!-- <div class="settings-field">
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
                 <input type="checkbox" id="settingsShowCliSessions" style="width:15px;height:15px;accent-color:var(--accent)">
                 <span data-i18n="settings_label_external_sessions">Show non-WebUI sessions</span>
@@ -1017,9 +1035,9 @@
             </div>
             <div class="settings-field">
               <label for="settingsBotName" data-i18n="settings_label_bot_name">Assistant Name</label>
-              <div style="font-size:11px;color:var(--muted);margin-bottom:6px" data-i18n="settings_desc_bot_name">Display name for the assistant throughout the UI. Defaults to Hermes.</div>
-              <input type="text" id="settingsBotName" placeholder="Hermes" maxlength="64" style="width:100%;padding:8px;background:var(--code-bg);color:var(--text);border:1px solid var(--border2);border-radius:6px;font-size:13px">
-            </div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:6px" data-i18n="settings_desc_bot_name">Display name for the assistant throughout the UI. Defaults to 云千易.</div>
+              <input type="text" id="settingsBotName" placeholder="云千易" maxlength="64" style="width:100%;padding:8px;background:var(--code-bg);color:var(--text);border:1px solid var(--border2);border-radius:6px;font-size:13px">
+            </div> -->
             <button class="sm-btn" onclick="saveSettings()" style="margin-top:12px;width:100%;padding:8px;font-weight:600" data-i18n="settings_save_btn">Save Settings</button>
             <div id="settingsPreferencesAutosaveStatus" class="settings-autosave-status" aria-live="polite"></div>
           </div>
@@ -1040,15 +1058,15 @@
           <div class="settings-pane" id="settingsPanePlugins">
             <div class="settings-section-head">
               <div>
-                <div class="settings-section-title">Plugins</div>
-                <div class="settings-section-meta">View installed Hermes plugins and the lifecycle hooks they register. This panel is read-only.</div>
+                <div class="settings-section-title" data-i18n="settings_section_plugins_title">Plugins</div>
+                <div class="settings-section-meta" data-i18n="settings_section_plugins_meta">View installed 云千易 plugins and the lifecycle hooks they register. This panel is read-only.</div>
               </div>
             </div>
             <div id="pluginsList" style="display:flex;flex-direction:column;margin-top:4px">
               <!-- Populated dynamically by loadPluginsPanel() -->
             </div>
-            <div id="pluginsEmpty" style="display:none;text-align:center;padding:32px 0;color:var(--muted);font-size:13px">
-              No Hermes plugins are currently visible. Install or enable plugins from the Hermes CLI/config to see them here.
+            <div id="pluginsEmpty" style="display:none;text-align:center;padding:32px 0;color:var(--muted);font-size:13px" data-i18n="plugins_panel_empty">
+              No 云千易 plugins are currently visible. Install or enable plugins from the 云千易 CLI/config to see them here.
             </div>
           </div>
           <div class="settings-pane" id="settingsPaneSystem">
@@ -1073,29 +1091,29 @@
             <button class="sm-btn" id="btnDisableAuth" onclick="disableAuth()" style="margin-top:6px;width:100%;padding:8px;font-weight:600;color:#e8a030;border-color:rgba(232,160,48,.3);display:none" data-i18n="disable_auth">Disable Auth</button>
             <button class="sm-btn" id="btnSignOut" onclick="signOut()" style="margin-top:6px;width:100%;padding:8px;font-weight:600;color:var(--accent);border-color:rgba(233,69,96,.3);display:none" data-i18n="sign_out">Sign Out</button>
             <div class="settings-field" style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border)">
-              <label for="settingsDashboardMode">Official Hermes Dashboard</label>
-              <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Show a nav-rail link when the official <code>hermes dashboard</code> is reachable. Overrides are restricted to loopback URLs.</div>
+              <label for="settingsDashboardMode" data-i18n="settings_label_official_dashboard">Official 云千易 Dashboard</label>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:8px" data-i18n="settings_desc_official_dashboard">Show a nav-rail link when the official <code>hermes dashboard</code> is reachable. Overrides are restricted to loopback URLs.</div>
               <select id="settingsDashboardMode" style="width:100%;padding:8px;background:var(--code-bg);color:var(--text);border:1px solid var(--border2);border-radius:6px">
-                <option value="auto">Auto-detect</option>
-                <option value="always">Always show</option>
-                <option value="never">Never show</option>
+                <option value="auto" data-i18n="settings_dashboard_auto">Auto-detect</option>
+                <option value="always" data-i18n="settings_dashboard_always">Always show</option>
+                <option value="never" data-i18n="settings_dashboard_never">Never show</option>
               </select>
               <input type="text" id="settingsDashboardUrl" placeholder="http://127.0.0.1:9119" style="margin-top:8px;width:100%;padding:8px;background:var(--code-bg);color:var(--text);border:1px solid var(--border2);border-radius:6px;font-size:13px">
-              <button class="sm-btn" onclick="saveDashboardSettings()" style="margin-top:8px;width:100%;padding:7px;font-weight:600">Save dashboard link settings</button>
+              <button class="sm-btn" onclick="saveDashboardSettings()" style="margin-top:8px;width:100%;padding:7px;font-weight:600" data-i18n="settings_save_dashboard_link">Save dashboard link settings</button>
               <div id="settingsDashboardStatus" class="settings-autosave-status" aria-live="polite"></div>
             </div>
             <!-- Gateway Status Section -->
             <div class="settings-field" style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border)">
-              <label>Gateway Status</label>
-              <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Status of the Hermes gateway (Telegram, Discord, Slack, etc.)</div>
-              <div id="gatewayStatusCard"><span style="color:var(--muted);font-size:12px">Loading…</span></div>
+              <label data-i18n="gateway_status_label">Gateway status</label>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:8px" data-i18n="gateway_status_desc">Status of the 云千易 gateway (Telegram, Discord, Slack, etc.)</div>
+              <div id="gatewayStatusCard"><span style="color:var(--muted);font-size:12px" data-i18n="gateway_loading">Loading…</span></div>
             </div>
             <!-- MCP Servers Section -->
             <div class="settings-field" style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border)">
               <label data-i18n="mcp_servers_title">MCP Servers</label>
               <div style="font-size:11px;color:var(--muted);margin-bottom:8px" data-i18n="mcp_servers_desc">View Model Context Protocol servers configured in config.yaml.</div>
               <div id="mcpServerList"></div>
-              <div class="mcp-restart-hint" data-i18n="mcp_restart_hint">Server changes are read-only here for now. Edit config.yaml and restart Hermes for changes to take effect.</div>
+              <div class="mcp-restart-hint" data-i18n="mcp_restart_hint">Server changes are read-only here for now. Edit config.yaml and restart 云千易 for changes to take effect.</div>
             </div>
             <!-- MCP Tools Section -->
             <div class="settings-field" style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border)">
@@ -1113,16 +1131,16 @@
   <aside class="rightpanel">
     <div class="resize-handle" id="rightpanelResize"></div>
     <div class="panel-header">
-      <span>Workspace</span>
+      <span data-i18n="workspace_panel_title">Workspace</span>
       <span class="git-badge" id="gitBadge" style="display:none"></span>
       <div class="panel-actions">
-        <button class="panel-icon-btn" id="btnCollapseWorkspacePanel" title="Hide workspace panel" onclick="toggleWorkspacePanel(false)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
-        <button class="panel-icon-btn" id="btnUpDir" title="Parent directory" onclick="navigateUp()" style="display:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg></button>
-        <button class="panel-icon-btn" id="btnNewFile" title="New file" onclick="promptNewFile()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
-        <button class="panel-icon-btn" id="btnNewFolder" title="New folder" onclick="promptNewFolder()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></button>
-        <button class="panel-icon-btn" id="btnRefreshPanel" title="Refresh" onclick="if(S.session)loadDir(S.currentDir)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button>
-        <button class="panel-icon-btn close-preview" id="btnClearPreview" title="Close preview"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-        <button class="panel-icon-btn mobile-close-btn" onclick="handleWorkspaceClose()" title="Close" aria-label="Close workspace panel">×</button>
+        <button class="panel-icon-btn" id="btnCollapseWorkspacePanel" title="Hide workspace panel" data-i18n-title="workspace_panel_hide" onclick="toggleWorkspacePanel(false)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
+        <button class="panel-icon-btn" id="btnUpDir" title="Parent directory" data-i18n-title="workspace_parent_dir" onclick="navigateUp()" style="display:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg></button>
+        <button class="panel-icon-btn" id="btnNewFile" title="New file" data-i18n-title="workspace_new_file" onclick="promptNewFile()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+        <button class="panel-icon-btn" id="btnNewFolder" title="New folder" data-i18n-title="workspace_new_folder" onclick="promptNewFolder()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></button>
+        <button class="panel-icon-btn" id="btnRefreshPanel" title="Refresh" data-i18n-title="workspace_refresh" onclick="if(S.session)loadDir(S.currentDir)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button>
+        <button class="panel-icon-btn close-preview" id="btnClearPreview" title="Close preview" data-i18n-title="workspace_close_preview"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        <button class="panel-icon-btn mobile-close-btn" onclick="handleWorkspaceClose()" title="Close" data-i18n-title="terminal_close" aria-label="Close workspace panel" data-i18n-aria-label="workspace_close_panel">×</button>
       </div>
     </div>
     <div class="breadcrumb-bar" id="breadcrumbBar" style="display:none"></div>
@@ -1132,19 +1150,19 @@
       <div class="preview-path" id="previewPath">
         <span id="previewPathText"></span>
         <span class="preview-badge" id="previewBadge"></span>
-        <button id="btnOpenInBrowser" class="panel-icon-btn" style="margin-left:auto;font-size:12px;width:auto;padding:2px 8px;display:none;align-items:center;gap:4px" onclick="openInBrowser()" title="Open in new browser tab"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> <span data-i18n="open_in_browser">Open in browser</span></button>
-        <button id="btnDownloadFile" class="panel-icon-btn" style="margin-left:auto;font-size:12px;width:auto;padding:2px 8px;display:inline-flex;align-items:center;gap:4px" onclick="downloadFile(_previewCurrentPath)" title="Download file to your computer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download</button>
-        <button id="btnEditFile" class="panel-icon-btn" style="font-size:12px;width:auto;padding:2px 8px;display:none;align-items:center;gap:4px" onclick="toggleEditMode()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit</button>
+        <button id="btnOpenInBrowser" class="panel-icon-btn" style="margin-left:auto;font-size:12px;width:auto;padding:2px 8px;display:none;align-items:center;gap:4px" onclick="openInBrowser()" title="Open in new browser tab" data-i18n-title="open_in_new_tab"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> <span data-i18n="open_in_browser">Open in browser</span></button>
+        <button id="btnDownloadFile" class="panel-icon-btn" style="margin-left:auto;font-size:12px;width:auto;padding:2px 8px;display:inline-flex;align-items:center;gap:4px" onclick="downloadFile(_previewCurrentPath)" title="Download file to your computer" data-i18n-title="file_download"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> <span data-i18n="file_download">Download</span></button>
+        <button id="btnEditFile" class="panel-icon-btn" style="font-size:12px;width:auto;padding:2px 8px;display:none;align-items:center;gap:4px" onclick="toggleEditMode()" title="Edit" data-i18n-title="file_edit"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> <span data-i18n="file_edit">Edit</span></button>
       </div>
       <pre class="preview-code" id="previewCode"></pre>
       <div class="preview-img-wrap" id="previewImgWrap" style="display:none"><img class="preview-img" id="previewImg" src="" alt=""></div>
       <div class="preview-media-wrap" id="previewMediaWrap" style="display:none"></div>
       <div class="preview-pdf-wrap" id="previewPdfWrap" style="display:none">
-        <iframe class="preview-pdf-frame" id="previewPdfFrame" src="" title="PDF preview"></iframe>
+        <iframe class="preview-pdf-frame" id="previewPdfFrame" src="" title="PDF preview" data-i18n-title="preview_pdf_title"></iframe>
       </div>
       <div class="preview-md" id="previewMd" style="display:none"></div>
       <div class="preview-html-wrap" id="previewHtmlWrap" style="display:none;flex:1;border-radius:8px;overflow:hidden;border:1px solid var(--border2)">
-        <iframe id="previewHtmlIframe" style="width:100%;height:100%;border:none;background:#fff" sandbox="allow-scripts" title="HTML preview"></iframe>
+        <iframe id="previewHtmlIframe" style="width:100%;height:100%;border:none;background:#fff" sandbox="allow-scripts" title="HTML preview" data-i18n-title="preview_html_title"></iframe>
       </div>
       <textarea id="previewEditArea" style="display:none;flex:1;width:100%;background:var(--code-bg);color:var(--pre-text);border:1px solid var(--border2);border-radius:8px;padding:12px;font-family:'SF Mono',ui-monospace,monospace;font-size:12px;line-height:1.6;resize:none;outline:none" oninput="_previewDirty=true;updateEditBtn()"></textarea>
     </div>
@@ -1155,8 +1173,8 @@
     <div class="onboarding-shell">
       <div class="onboarding-sidebar">
         <div class="onboarding-badge" data-i18n="onboarding_badge">FIRST RUN</div>
-        <h2 id="onboardingTitle" data-i18n="onboarding_title">Welcome to Hermes Web UI</h2>
-        <p id="onboardingLead" data-i18n="onboarding_lead">A quick guided setup will check your Hermes install, choose a workspace and model, and optionally protect the app with a password.</p>
+        <h2 id="onboardingTitle" data-i18n="onboarding_title">欢迎使用云千易</h2>
+        <p id="onboardingLead" data-i18n="onboarding_lead">快速引导将验证云千易安装、选择工作区和模型，并可选设置密码保护应用。</p>
         <div class="onboarding-steps" id="onboardingSteps"></div>
       </div>
       <div class="onboarding-main">
@@ -1175,7 +1193,7 @@
 <div class="app-dialog-overlay" id="appDialogOverlay" style="display:none" aria-hidden="true">
   <div class="app-dialog" id="appDialog" role="dialog" aria-modal="true" aria-labelledby="appDialogTitle" aria-describedby="appDialogDesc">
     <div class="app-dialog-header">
-      <div class="app-dialog-title" id="appDialogTitle">Confirm action</div>
+      <div class="app-dialog-title" id="appDialogTitle" data-i18n="dialog_confirm_title">Confirm action</div>
       <button class="app-dialog-close" id="appDialogClose" type="button" aria-label="Close dialog">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -1184,7 +1202,7 @@
     <input class="app-dialog-input" id="appDialogInput" type="text" style="display:none">
     <div class="app-dialog-actions">
       <button class="app-dialog-btn" id="appDialogCancel" type="button" data-i18n="cancel">Cancel</button>
-      <button class="app-dialog-btn confirm" id="appDialogConfirm" type="button">Confirm</button>
+      <button class="app-dialog-btn confirm" id="appDialogConfirm" type="button" data-i18n="dialog_confirm_btn">Confirm</button>
     </div>
   </div>
 </div>
@@ -1194,6 +1212,7 @@
 <script src="static/ui.js?v=__WEBUI_VERSION__" defer></script>
 <script src="static/workspace.js?v=__WEBUI_VERSION__" defer></script>
 <script src="static/terminal.js?v=__WEBUI_VERSION__" defer></script>
+<script src="static/hermes-storage-clear.js?v=__WEBUI_VERSION__" defer></script>
 <script src="static/sessions.js?v=__WEBUI_VERSION__" defer></script>
 <script src="static/commands.js?v=__WEBUI_VERSION__" defer></script>
 <script src="static/messages.js?v=__WEBUI_VERSION__" defer></script>
@@ -1209,11 +1228,11 @@
     <input type="hidden" id="kanbanBoardModalSlug" value="">
     <div class="kanban-modal-row">
       <label for="kanbanBoardModalName" data-i18n="kanban_board_name">Name</label>
-      <input type="text" id="kanbanBoardModalName" maxlength="64" placeholder="e.g. Experiments" autocomplete="off">
+      <input type="text" id="kanbanBoardModalName" maxlength="64" placeholder="e.g. Experiments" data-i18n-placeholder="kanban_board_name_placeholder" autocomplete="off">
     </div>
     <div class="kanban-modal-row" id="kanbanBoardModalSlugRow">
       <label for="kanbanBoardModalSlugInput" data-i18n="kanban_board_slug">Slug (lowercase, hyphens)</label>
-      <input type="text" id="kanbanBoardModalSlugInput" maxlength="48" placeholder="experiments" autocomplete="off">
+      <input type="text" id="kanbanBoardModalSlugInput" maxlength="48" placeholder="experiments" data-i18n-placeholder="kanban_board_slug_placeholder" autocomplete="off">
     </div>
     <div class="kanban-modal-row">
       <label for="kanbanBoardModalDesc" data-i18n="kanban_board_description">Description (optional)</label>

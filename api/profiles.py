@@ -44,6 +44,32 @@ def _unwrap_profile_home_to_base(home: Path) -> Path:
     return home
 
 
+# SaaS 租户目录名：与 api.tenant_paths.user_key_from_user_id 一致（u + SHA256 截断 24 位 hex）。
+_SAAS_USER_KEY_DIR_RE = re.compile(r"^u[0-9a-f]{24}$")
+
+
+def _strip_trailing_saas_tenant_key_dirs(home: Path) -> Path:
+    """若环境变量把 HERMES_HOME 指到已是 ``.../users/<user_key>`` 或 ``.../<user_key>``
+    的租户目录，再拼一层 ``users/<user_key>`` 会套娃。从末尾交替剥掉 ``<user_key>`` 与
+    ``users``，直到再也剥不动为止（覆盖 ``.../users/u1/users/u2`` 这类错误拼接）。
+    """
+    try:
+        p = home.expanduser().resolve()
+    except Exception:
+        p = home.expanduser()
+    while True:
+        advanced = False
+        while _SAAS_USER_KEY_DIR_RE.fullmatch(p.name):
+            p = p.parent
+            advanced = True
+        while p.name == "users":
+            p = p.parent
+            advanced = True
+        if not advanced:
+            break
+    return p
+
+
 def _resolve_base_hermes_home() -> Path:
     """Return the BASE ~/.hermes directory — the root that contains profiles/.
 
@@ -72,13 +98,15 @@ def _resolve_base_hermes_home() -> Path:
     # Explicit override for tests or unusual setups
     base_override = os.getenv('HERMES_BASE_HOME', '').strip()
     if base_override:
-        return _unwrap_profile_home_to_base(Path(base_override).expanduser())
+        return _strip_trailing_saas_tenant_key_dirs(
+            _unwrap_profile_home_to_base(Path(base_override).expanduser())
+        )
 
     hermes_home = os.getenv('HERMES_HOME', '').strip()
     if hermes_home:
         p = Path(hermes_home).expanduser()
         # If HERMES_HOME points to a profiles/ subdir, walk up two levels to the base
-        return _unwrap_profile_home_to_base(p)
+        return _strip_trailing_saas_tenant_key_dirs(_unwrap_profile_home_to_base(p))
 
     return Path.home() / '.hermes'
 
@@ -224,8 +252,36 @@ def get_active_hermes_home() -> Path:
     Uses get_active_profile_name() so per-request TLS context (issue #798)
     is respected, not just the process-level global.
     """
+    try:
+        from api.tenant_context import get_tenant_hermes_home, saas_enabled
+        if saas_enabled():
+            tenant_home = get_tenant_hermes_home()
+            if tenant_home is not None:
+                return tenant_home
+    except Exception:
+        pass
     return _resolve_profile_home_for_name(get_active_profile_name())
 
+
+def get_shared_model_config_home() -> Path:
+    """返回「共用模型与密钥」使用的 Hermes 根目录（其下的 config.yaml、.env 等）。
+
+    SaaS 多租户场景里，`get_active_hermes_home()` 往往指向按用户隔离的租户目录
+    （会话、state.db、skills 等），通常**不会**复制运维在主机上配好的 LLM；
+    若仍用租户路径去读配置，会出现 ``No LLM provider configured``。
+
+    本函数给 WebUI / 流式线程一个明确的主机侧配置根，用于加载默认模型与
+    ``resolve_runtime_provider``（其内部通过环境变量 ``HERMES_HOME`` 调用
+    ``hermes_cli.config.load_config``）。
+
+    解析顺序：
+      1. 环境变量 ``HERMES_WEBUI_SHARED_HERMES_HOME``（最高优先级，适合固定部署路径）
+      2. 当前请求生效的 Hermes profile 对应目录（与未开 SaaS 时行为一致）
+    """
+    override = os.getenv("HERMES_WEBUI_SHARED_HERMES_HOME", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return get_hermes_home_for_profile(get_active_profile_name())
 
 
 # ── Cron-call profile isolation (issue: Scheduled jobs ignored active profile) ─

@@ -607,7 +607,7 @@ async function _pollCodexOAuth(){
     _codexOAuthFlowId=null;
     _setCodexOAuthButton(true);
     if(status==='success'){
-      _renderCodexOAuthTerminal('success','Credentials saved to the Hermes credential pool. Refreshing provider status…');
+      _renderCodexOAuthTerminal('success','Credentials saved to the 云千易 credential pool. Refreshing provider status…');
       showToast(t('oauth_codex_success'));
       try{await loadOnboardingWizard();}catch(e){}
     }else if(status==='expired'){

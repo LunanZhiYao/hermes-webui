@@ -335,8 +335,28 @@ class TestReasoningConfigHelpers:
         import pytest as _pt
         with _pt.raises(ValueError):
             cfg.set_reasoning_effort('garbage')
+
+    def test_preview_reasoning_effort_setting(self):
+        from api.config import preview_reasoning_effort_setting
+
+        assert preview_reasoning_effort_setting('') == ''
+        assert preview_reasoning_effort_setting('default') == ''
+        assert preview_reasoning_effort_setting('HIGH') == 'high'
+        assert preview_reasoning_effort_setting('none') == 'none'
+        import pytest as _pt
+
         with _pt.raises(ValueError):
-            cfg.set_reasoning_effort('')
+            preview_reasoning_effort_setting('garbage')
+
+    def test_get_reasoning_status_empty_effort_without_yaml_key(self, tmp_path, monkeypatch):
+        """When agent.reasoning_effort is absent, GET shows ''."""
+        import api.config as cfg
+        cfgfile = tmp_path / 'config.yaml'
+        monkeypatch.setattr(cfg, '_get_config_path', lambda: cfgfile)
+        cfgfile.write_text('agent: {}\n', encoding='utf-8')
+        cfg.reload_config()
+        st = cfg.get_reasoning_status()
+        assert st['reasoning_effort'] == ''
 
     def test_get_reasoning_status_defaults_to_show_true(self, tmp_path, monkeypatch):
         """When config.yaml has no display section, show_reasoning defaults
@@ -394,4 +414,7 @@ class TestReasoningRoutes:
         assert 'set_reasoning_effort' in src, (
             "POST /api/reasoning must route effort changes through "
             "set_reasoning_effort"
+        )
+        assert 'persist' in src and 'preview_reasoning_effort_setting' in src, (
+            "POST /api/reasoning must support persist:false without yaml write"
         )

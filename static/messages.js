@@ -198,7 +198,7 @@ async function send(){
 
   // Set provisional title from user message immediately so session appears
   // in the sidebar right away with a meaningful name (server may refine later)
-  if(S.session&&(S.session.title==='Untitled'||!S.session.title)){
+  if(S.session&&((typeof _isBackendDefaultSessionTitle==='function')?_isBackendDefaultSessionTitle(S.session.title):(S.session.title==='Untitled'||!S.session.title))){
     const provisionalTitle=displayText.slice(0,64);
     S.session.title=provisionalTitle;
     syncTopbar();
@@ -225,7 +225,8 @@ async function send(){
       session_id:activeSid,message:msgText,
       model:S.session.model||$('modelSelect').value,workspace:S.session.workspace,
       model_provider:S.session.model_provider||null,
-      attachments:uploaded.length?uploaded:undefined
+      attachments:uploaded.length?uploaded:undefined,
+      ...(typeof reasoningEffortChatPayload==='function'?reasoningEffortChatPayload():{})
     })});
     if(startData.effective_model && S.session){
       S.session.model=startData.effective_model;
@@ -1239,7 +1240,7 @@ function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
 }
 
 function transcript(){
-  const lines=[`# Hermes session ${S.session?.session_id||''}`,``,
+  const lines=[`# 云千易 session ${S.session?.session_id||''}`,``,
     `Workspace: ${S.session?.workspace||''}`,`Model: ${S.session?.model||''}`,``];
   for(const m of S.messages){
     if(!m||m.role==='tool')continue;
@@ -1874,7 +1875,7 @@ function playNotificationSound(){
 function sendBrowserNotification(title,body){
   if(!window._notificationsEnabled||!document.hidden) return;
   if(!('Notification' in window)) return;
-  const botName=window._botName||'Hermes';
+  const botName=window._botName||'云千易';
   if(Notification.permission==='granted'){
     new Notification(title||botName,{body:body});
   }else if(Notification.permission!=='denied'){

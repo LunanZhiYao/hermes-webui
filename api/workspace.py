@@ -26,13 +26,82 @@ from api.config import (
 
 # ── Profile-aware path resolution ───────────────────────────────────────────
 
+def _saas_webui_request() -> bool:
+    """当前请求是否为 SaaS 且已绑定租户（WebUI 状态应隔离到 runtime_paths）。"""
+    try:
+        from api.tenant_context import get_tenant_webui_state_dir, saas_enabled
+
+        return bool(saas_enabled() and get_tenant_webui_state_dir() is not None)
+    except ImportError:
+        return False
+
+
+def resolve_saas_workspace_path(workspace: str) -> str:
+    """SaaS 租户请求下，保证会话工作区落在当前租户 Hermes 根目录之内。
+
+    旧会话或全局 last_workspace 可能指向 ``~/workspace``；若不纠正，Agent 会把文件
+    写到租户目录外。路径已在租户树下则原样返回（允许租户下的自定义子目录）。
+    """
+    try:
+        from api.tenant_context import get_tenant_hermes_home, saas_enabled
+
+        if not saas_enabled():
+            return workspace
+        th = get_tenant_hermes_home()
+        if th is None:
+            return workspace
+        root = th.expanduser().resolve()
+        try:
+            p = Path(workspace).expanduser().resolve()
+            p.relative_to(root)
+            return str(p)
+        except ValueError:
+            tw = root / "workspace"
+            tw.mkdir(parents=True, exist_ok=True)
+            return str(tw.resolve())
+    except Exception:
+        logger.debug("resolve_saas_workspace_path fallback", exc_info=True)
+        return workspace
+
+
+def _tenant_hermes_workspace_dir() -> Path | None:
+    """租户 Hermes 根目录下的 workspace/（与 ensure_tenant_layout 一致）。"""
+    try:
+        from api.tenant_context import get_tenant_hermes_home, saas_enabled
+
+        if not saas_enabled():
+            return None
+        th = get_tenant_hermes_home()
+        if th is None:
+            return None
+        d = (th / "workspace").expanduser().resolve()
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+    except Exception:
+        logger.debug("tenant workspace dir resolution failed", exc_info=True)
+        return None
+
+
 def _profile_state_dir() -> Path:
     """Return the webui_state directory for the active profile.
 
     For the default profile, returns the global STATE_DIR (respects
     HERMES_WEBUI_STATE_DIR env var for test isolation).
     For named profiles, returns {profile_home}/webui_state/.
+
+    SaaS 多租户：与 sessions / projects 一致，使用 runtime_paths.get_state_dir()
+    （按租户隔离），避免 default profile 仍读写全局 STATE_DIR 导致 last_workspace
+    落到 ~/workspace。
     """
+    if _saas_webui_request():
+        try:
+            from api.runtime_paths import get_state_dir
+
+            d = get_state_dir()
+            d.mkdir(parents=True, exist_ok=True)
+            return d
+        except ImportError:
+            logger.debug("runtime_paths unavailable, falling back to global state dir")
     try:
         from api.profiles import get_active_profile_name, get_active_hermes_home
         name = get_active_profile_name()
@@ -64,7 +133,13 @@ def _profile_default_workspace() -> str:
       3. 'terminal.cwd'      — hermes-agent terminal working dir (most common)
 
     Falls back to the boot-time DEFAULT_WORKSPACE constant.
+
+    SaaS 租户：默认工作区必须是租户 Hermes 下的 workspace/，不能沿用共用
+    config 里的 terminal.cwd（常常是主机 ~/workspace），否则文件会写到租户目录外。
     """
+    tw = _tenant_hermes_workspace_dir()
+    if tw is not None:
+        return str(tw)
     try:
         from api.config import get_config
         cfg = get_config()
@@ -130,6 +205,33 @@ def _clean_workspace_list(workspaces: list) -> list:
     return result
 
 
+def _saas_allowlisted_workspaces(workspaces: list) -> list:
+    """丢弃不在当前租户 Hermes 根下的条目（例如历史遗留的 ~/workspace）。"""
+    try:
+        from api.tenant_context import get_tenant_hermes_home, saas_enabled
+
+        if not saas_enabled():
+            return workspaces
+        th = get_tenant_hermes_home()
+        if th is None:
+            return workspaces
+        root = th.expanduser().resolve()
+        out = []
+        for w in workspaces:
+            path = w.get("path", "")
+            if not path:
+                continue
+            try:
+                p = Path(path).expanduser().resolve()
+                p.relative_to(root)
+                out.append(w)
+            except ValueError:
+                continue
+        return out
+    except Exception:
+        return workspaces
+
+
 def _migrate_global_workspaces() -> list:
     """Read the legacy global workspaces.json, clean it, and return the result.
 
@@ -158,8 +260,12 @@ def load_workspaces() -> list:
         try:
             raw = json.loads(ws_file.read_text(encoding='utf-8'))
             cleaned = _clean_workspace_list(raw)
-            if len(cleaned) != len(raw):
-                # Persist the cleaned version so stale entries don't keep reappearing
+            dirty = len(cleaned) != len(raw)
+            if _saas_webui_request():
+                _prev_len = len(cleaned)
+                cleaned = _saas_allowlisted_workspaces(cleaned)
+                dirty = dirty or len(cleaned) != _prev_len
+            if dirty:
                 try:
                     ws_file.write_text(
                         json.dumps(cleaned, ensure_ascii=False, indent=2), encoding='utf-8'
@@ -172,12 +278,13 @@ def load_workspaces() -> list:
     # No profile-local file yet.
     # For the DEFAULT profile: migrate from the legacy global file (one-time cleanup).
     # For NAMED profiles: always start clean with just their own workspace.
+    # SaaS 租户：禁止从全局 STATE_DIR 迁移工作区列表（会把 ~/workspace 带进租户）。
     try:
         from api.profiles import get_active_profile_name
         is_default = get_active_profile_name() in ('default', None)
     except ImportError:
         is_default = True
-    if is_default:
+    if is_default and not _saas_webui_request():
         migrated = _migrate_global_workspaces()
         if migrated:
             return migrated
@@ -200,19 +307,21 @@ def get_last_workspace() -> str:
                 return p
         except Exception:
             logger.debug("Failed to read last workspace from %s", lw_file)
-    # Fallback: try global file
-    if _GLOBAL_LW_FILE.exists():
-        try:
-            p = _GLOBAL_LW_FILE.read_text(encoding='utf-8').strip()
-            if p and Path(p).is_dir():
-                return p
-        except Exception:
-            logger.debug("Failed to read global last workspace")
+    # Fallback: try global file（非 SaaS 租户请求才允许，否则会把别人的 ~/workspace 当默认）
+    if not _saas_webui_request():
+        if _GLOBAL_LW_FILE.exists():
+            try:
+                p = _GLOBAL_LW_FILE.read_text(encoding='utf-8').strip()
+                if p and Path(p).is_dir():
+                    return p
+            except Exception:
+                logger.debug("Failed to read global last workspace")
     return _profile_default_workspace()
 
 
 def set_last_workspace(path: str) -> None:
     try:
+        path = resolve_saas_workspace_path(path)
         lw_file = _last_workspace_file()
         lw_file.parent.mkdir(parents=True, exist_ok=True)
         lw_file.write_text(str(path), encoding='utf-8')
@@ -511,10 +620,16 @@ def resolve_trusted_workspace(path: str | Path | None = None) -> Path:
 
     None/empty path falls back to the boot-time DEFAULT_WORKSPACE, which is always
     trusted (it was validated at server startup).
+
+    SaaS 租户：空路径与非租户路径会先经 ``resolve_saas_workspace_path`` 纠正到
+    ``<tenant>/workspace``，再执行信任校验。
     """
     if path in (None, ""):
+        if _saas_webui_request():
+            return Path(_profile_default_workspace()).expanduser().resolve()
         return Path(_BOOT_DEFAULT_WORKSPACE).expanduser().resolve()
 
+    path = resolve_saas_workspace_path(str(path))
     candidate = Path(path).expanduser().resolve()
 
     if not candidate.exists():

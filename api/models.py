@@ -13,15 +13,80 @@ from pathlib import Path
 
 import api.config as _cfg
 from api.config import (
-    SESSION_DIR, SESSION_INDEX_FILE, SESSIONS, SESSIONS_MAX,
-    LOCK, STREAMS, STREAMS_LOCK, DEFAULT_WORKSPACE, DEFAULT_MODEL, PROJECTS_FILE, HOME,
-    get_effective_default_model, _get_session_agent_lock,
+    SESSION_DIR,
+    SESSION_INDEX_FILE,
+    SESSIONS,
+    SESSIONS_MAX,
+    LOCK,
+    STREAMS,
+    STREAMS_LOCK,
+    DEFAULT_WORKSPACE,
+    DEFAULT_MODEL,
+    PROJECTS_FILE,
+    HOME,
+    get_effective_default_model,
+    _get_session_agent_lock,
 )
-from api.workspace import get_last_workspace
+from api.runtime_paths import get_projects_file, get_session_dir, get_session_index_path
+from api.workspace import get_last_workspace, resolve_saas_workspace_path
 from api.agent_sessions import read_importable_agent_session_rows, read_session_lineage_metadata
 
 logger = logging.getLogger(__name__)
 CLI_VISIBLE_SESSION_LIMIT = 20
+
+
+def _session_dir() -> Path:
+    return get_session_dir()
+
+
+def _session_files_root(session=None) -> Path:
+    """会话 JSON 所在目录（``<state>/sessions``）。
+
+    SaaS 后台线程往往没有租户 TLS；若 ``Session`` 已从磁盘加载并打上
+    ``_webui_tenant_state_dir``，则写路径与同租户 HTTP 请求一致。
+    """
+    if session is not None:
+        stamped = getattr(session, "_webui_tenant_state_dir", None)
+        if stamped:
+            return Path(stamped).expanduser().resolve() / "sessions"
+    return _session_dir()
+
+
+def _session_index_file() -> Path:
+    return get_session_index_path()
+
+
+def _projects_file() -> Path:
+    return get_projects_file()
+
+
+def _session_in_current_tenant_cache(s: "Session") -> bool:
+    """True if *s* belongs to the current HTTP tenant's WebUI state namespace.
+
+    The process-global ``SESSIONS`` LRU is shared across SaaS tenants; without
+    this guard, ``all_sessions()`` and ``get_session()`` would leak foreign
+    in-memory rows across users on the same worker.
+    """
+    try:
+        from api.tenant_context import get_tenant_webui_state_dir, saas_enabled
+
+        if not saas_enabled():
+            return True
+        cur = get_tenant_webui_state_dir()
+        if cur is None:
+            # No request tenant (scripts / rare paths): preserve legacy behaviour.
+            return True
+        cur_s = str(cur)
+        owner = getattr(s, "_webui_tenant_state_dir", None)
+        if owner == cur_s:
+            return True
+        # Upgrade path: JSON loaded before tagging, or cache row — confirm disk.
+        if (_session_dir() / f"{s.session_id}.json").exists():
+            s._webui_tenant_state_dir = cur_s
+            return True
+        return False
+    except Exception:
+        return True
 
 # ---------------------------------------------------------------------------
 # Stale temp-file cleanup
@@ -43,17 +108,18 @@ _STALE_TMP_AGE_SECONDS = 3600  # 1 hour
 _INDEX_WRITE_LOCK = threading.RLock()
 
 
-def _cleanup_stale_tmp_files() -> None:
-    """Best-effort removal of stale ``*.tmp.*`` files from SESSION_DIR.
+def _cleanup_stale_tmp_files(sessions_root: Path | None = None) -> None:
+    """Best-effort removal of stale ``*.tmp.*`` files under the sessions directory.
 
     Only files whose mtime is older than ``_STALE_TMP_AGE_SECONDS`` are
     removed so that in-flight writes from a long-running sibling process
     are not disturbed.  Errors are logged and swallowed — this must never
     prevent startup.
     """
+    root = sessions_root if sessions_root is not None else _session_dir()
     cutoff = time.time() - _STALE_TMP_AGE_SECONDS
     try:
-        for p in SESSION_DIR.glob('*.tmp.*'):
+        for p in root.glob('*.tmp.*'):
             try:
                 if p.stat().st_mtime < cutoff:
                     p.unlink(missing_ok=True)
@@ -76,10 +142,13 @@ def _index_entry_exists(session_id: str, in_memory_ids=None) -> bool:
         return False
     if in_memory_ids is None:
         with LOCK:
-            in_memory_ids = set(SESSIONS.keys())
+            in_memory_ids = {
+                sid for sid, s in SESSIONS.items()
+                if _session_in_current_tenant_cache(s)
+            }
     if session_id in in_memory_ids:
         return True
-    p = SESSION_DIR / f'{session_id}.json'
+    p = _session_dir() / f'{session_id}.json'
     return p.exists()
 
 
@@ -94,14 +163,20 @@ def _write_session_index(updates=None):
     LOCK protects in-memory state snapshots and payload construction only;
     disk I/O (write/flush/fsync/replace) always runs outside LOCK.
     """
-    _tmp = SESSION_INDEX_FILE.with_suffix(f'.tmp.{os.getpid()}.{threading.current_thread().ident}')
+    if updates:
+        sessions_root = _session_files_root(updates[0])
+        index_file = sessions_root / "_index.json"
+    else:
+        sessions_root = _session_dir()
+        index_file = _session_index_file()
+    _tmp = index_file.with_suffix(f'.tmp.{os.getpid()}.{threading.current_thread().ident}')
 
     with _INDEX_WRITE_LOCK:
         # Lazy full-rebuild path — used when index doesn't exist yet.
-        if updates is None or not SESSION_INDEX_FILE.exists():
-            _cleanup_stale_tmp_files()  # best-effort sweep on startup / first call
+        if updates is None or not index_file.exists():
+            _cleanup_stale_tmp_files(sessions_root)  # best-effort sweep on startup / first call
             entries = []
-            for p in SESSION_DIR.glob('*.json'):
+            for p in sessions_root.glob('*.json'):
                 if p.name.startswith('_'):
                     continue
                 try:
@@ -114,6 +189,8 @@ def _write_session_index(updates=None):
             with LOCK:
                 existing_ids = {e.get('session_id') for e in entries}
                 for s in SESSIONS.values():
+                    if not _session_in_current_tenant_cache(s):
+                        continue
                     if s.session_id not in existing_ids:
                         entries.append(s.compact())
                 entries.sort(key=lambda s: s.get('updated_at', 0), reverse=True)
@@ -124,7 +201,7 @@ def _write_session_index(updates=None):
                     f.write(_payload)
                     f.flush()
                     os.fsync(f.fileno())
-                os.replace(_tmp, SESSION_INDEX_FILE)
+                os.replace(_tmp, index_file)
             except Exception:
                 # Best-effort cleanup of stale tmp on failure
                 try:
@@ -139,14 +216,17 @@ def _write_session_index(updates=None):
         _fallback = False
         try:
             with LOCK:
-                existing = json.loads(SESSION_INDEX_FILE.read_text(encoding='utf-8'))
-                in_memory_ids = set(SESSIONS.keys())
+                existing = json.loads(index_file.read_text(encoding='utf-8'))
+                in_memory_ids = {
+                    sid for sid, s in SESSIONS.items()
+                    if _session_in_current_tenant_cache(s)
+                }
 
                 # Avoid N filesystem exists() checks under LOCK by collecting
                 # on-disk IDs once.
                 on_disk_ids = {
                     p.stem
-                    for p in SESSION_DIR.glob('*.json')
+                    for p in sessions_root.glob('*.json')
                     if not p.name.startswith('_')
                 }
 
@@ -175,7 +255,7 @@ def _write_session_index(updates=None):
                     f.write(_payload)
                     f.flush()
                     os.fsync(f.fileno())
-                os.replace(_tmp, SESSION_INDEX_FILE)
+                os.replace(_tmp, index_file)
             except Exception:
                 try:
                     _tmp.unlink(missing_ok=True)
@@ -294,7 +374,7 @@ def _read_metadata_json_prefix(path, max_prefix_bytes=65536):
 def _lookup_index_message_count(session_id):
     """Return the indexed message count without loading the full session file."""
     try:
-        entries = json.loads(SESSION_INDEX_FILE.read_text(encoding='utf-8'))
+        entries = json.loads(_session_index_file().read_text(encoding='utf-8'))
     except Exception:
         return None
     if not isinstance(entries, list):
@@ -337,7 +417,7 @@ class Session:
                 **kwargs):
         self.session_id = session_id or uuid.uuid4().hex[:12]
         self.title = title
-        self.workspace = str(Path(workspace).expanduser().resolve())
+        self.workspace = str(Path(resolve_saas_workspace_path(workspace)).expanduser().resolve())
         self.model = model
         self.model_provider = str(model_provider).strip().lower() if model_provider else None
         self.messages = messages or []
@@ -372,10 +452,22 @@ class Session:
         self.source_label = kwargs.get('source_label')
         self.enabled_toolsets = enabled_toolsets  # List[str] or None — per-session toolset override
         self._metadata_message_count = None
+        # SaaS: tags shared LRU rows; underscore → omitted from save() payload.
+        self._webui_tenant_state_dir = kwargs.pop("_webui_tenant_state_dir", None)
+        if self._webui_tenant_state_dir is None:
+            try:
+                from api.tenant_context import get_tenant_webui_state_dir, saas_enabled
+
+                if saas_enabled():
+                    td = get_tenant_webui_state_dir()
+                    if td is not None:
+                        self._webui_tenant_state_dir = str(td)
+            except Exception:
+                pass
 
     @property
     def path(self):
-        return SESSION_DIR / f'{self.session_id}.json'
+        return _session_files_root(self) / f'{self.session_id}.json'
 
     def save(self, touch_updated_at: bool = True, skip_index: bool = False) -> None:
         # ── #1558 P0 guard ──────────────────────────────────────────────
@@ -487,15 +579,27 @@ class Session:
         if not skip_index:
             _write_session_index(updates=[self])
 
+    @staticmethod
+    def _stamp_webui_state_dir_from_path(session, session_json: Path) -> None:
+        """从磁盘路径推断 WebUI state 根目录，供无租户 TLS 的后台线程写盘。"""
+        if getattr(session, "_webui_tenant_state_dir", None):
+            return
+        try:
+            session._webui_tenant_state_dir = str(session_json.resolve().parent.parent)
+        except Exception:
+            pass
+
     @classmethod
     def load(cls, sid):
         # Validate session ID format to prevent path traversal
         if not sid or not all(c in '0123456789abcdefghijklmnopqrstuvwxyz_' for c in sid):
             return None
-        p = SESSION_DIR / f'{sid}.json'
+        p = _session_dir() / f'{sid}.json'
         if not p.exists():
             return None
-        return cls(**json.loads(p.read_text(encoding='utf-8')))
+        session = cls(**json.loads(p.read_text(encoding='utf-8')))
+        cls._stamp_webui_state_dir_from_path(session, p)
+        return session
 
     @classmethod
     def load_metadata_only(cls, sid):
@@ -508,7 +612,7 @@ class Session:
         """
         if not sid or not all(c in '0123456789abcdefghijklmnopqrstuvwxyz_' for c in sid):
             return None
-        p = SESSION_DIR / f'{sid}.json'
+        p = _session_dir() / f'{sid}.json'
         if not p.exists():
             return None
         try:
@@ -522,6 +626,7 @@ class Session:
             parsed['messages'] = []
             parsed['tool_calls'] = []
             session = cls(**parsed)
+            cls._stamp_webui_state_dir_from_path(session, p)
             session._metadata_message_count = _lookup_index_message_count(sid)
             # Mark this session as a metadata-only stub. save() refuses to write
             # such a session because doing so would atomically replace the
@@ -854,8 +959,10 @@ def get_session(sid, metadata_only=False):
     """
     with LOCK:
         if sid in SESSIONS:
-            SESSIONS.move_to_end(sid)  # LRU: mark as recently used
-            return SESSIONS[sid]
+            cached = SESSIONS[sid]
+            if _session_in_current_tenant_cache(cached):
+                SESSIONS.move_to_end(sid)  # LRU: mark as recently used
+                return cached
     if metadata_only:
         s = Session.load_metadata_only(sid)
         if s:
@@ -942,6 +1049,14 @@ def _hide_from_default_sidebar(session: dict) -> bool:
 def _active_state_db_path() -> Path:
     """Return state.db for the active Hermes profile, degrading to HERMES_HOME."""
     try:
+        from api.tenant_context import get_tenant_hermes_home, saas_enabled
+        if saas_enabled():
+            tenant_home = get_tenant_hermes_home()
+            if tenant_home is not None:
+                return tenant_home / "state.db"
+    except Exception:
+        pass
+    try:
         from api.profiles import get_active_hermes_home
         hermes_home = Path(get_active_hermes_home()).expanduser().resolve()
     except Exception:
@@ -967,9 +1082,9 @@ def _enrich_sidebar_lineage_metadata(sessions: list[dict]) -> None:
 def all_sessions():
     active_stream_ids = _active_stream_ids()
     # Phase C: try index first for O(1) read; fall back to full scan
-    if SESSION_INDEX_FILE.exists():
+    if _session_index_file().exists():
         try:
-            index = json.loads(SESSION_INDEX_FILE.read_text(encoding='utf-8'))
+            index = json.loads(_session_index_file().read_text(encoding='utf-8'))
             index = [
                 s for s in index
                 if _index_entry_exists(s.get('session_id'))
@@ -995,6 +1110,8 @@ def all_sessions():
             index_map = {s['session_id']: s for s in index}
             with LOCK:
                 for s in SESSIONS.values():
+                    if not _session_in_current_tenant_cache(s):
+                        continue
                     index_map[s.session_id] = s.compact(
                         include_runtime=True,
                         active_stream_ids=active_stream_ids,
@@ -1029,7 +1146,7 @@ def all_sessions():
             logger.debug("Failed to load session index, falling back to full scan")
     # Full scan fallback
     out = []
-    for p in SESSION_DIR.glob('*.json'):
+    for p in _session_dir().glob('*.json'):
         if p.name.startswith('_'): continue
         try:
             s = Session.load(p.stem)
@@ -1037,6 +1154,8 @@ def all_sessions():
         except Exception:
             logger.debug("Failed to load session from %s", p)
     for s in SESSIONS.values():
+        if not _session_in_current_tenant_cache(s):
+            continue
         if all(s.session_id != x.session_id for x in out): out.append(s)
     out.sort(key=lambda s: (getattr(s, 'pinned', False), _session_sort_timestamp(s)), reverse=True)
     # Hide empty Untitled sessions from the UI entirely — kept consistent with the
@@ -1096,9 +1215,9 @@ def _backfill_project_profiles_if_needed(projects: list) -> bool:
 
     # Build session_id -> profile map for the untagged project_ids.
     session_profile_by_project: dict[str, str] = {}
-    if SESSION_INDEX_FILE.exists():
+    if _session_index_file().exists():
         try:
-            entries = json.loads(SESSION_INDEX_FILE.read_text(encoding='utf-8'))
+            entries = json.loads(_session_index_file().read_text(encoding='utf-8'))
             untagged_ids = {p['project_id'] for p in untagged if p.get('project_id')}
             for e in entries:
                 pid = e.get('project_id')
@@ -1124,10 +1243,10 @@ def load_projects(*, _migrate: bool = True) -> list:
     callsites that want the raw on-disk shape (test fixtures, e.g.).
     """
     global _projects_migrated
-    if not PROJECTS_FILE.exists():
+    if not _projects_file().exists():
         return []
     try:
-        projects = json.loads(PROJECTS_FILE.read_text(encoding='utf-8'))
+        projects = json.loads(_projects_file().read_text(encoding='utf-8'))
     except Exception:
         return []
     if _migrate and not _projects_migrated:
@@ -1141,7 +1260,7 @@ def load_projects(*, _migrate: bool = True) -> list:
                 # rows (which a mutation route could then write back,
                 # silently overwriting the migration).
                 try:
-                    return json.loads(PROJECTS_FILE.read_text(encoding='utf-8'))
+                    return json.loads(_projects_file().read_text(encoding='utf-8'))
                 except Exception:
                     return projects
             if _backfill_project_profiles_if_needed(projects):
@@ -1158,7 +1277,7 @@ def load_projects(*, _migrate: bool = True) -> list:
 
 def save_projects(projects) -> None:
     """Write project list to disk."""
-    PROJECTS_FILE.write_text(json.dumps(projects, ensure_ascii=False, indent=2), encoding='utf-8')
+    _projects_file().write_text(json.dumps(projects, ensure_ascii=False, indent=2), encoding='utf-8')
 
 
 CRON_PROJECT_NAME = 'Cron Jobs'
@@ -1492,21 +1611,11 @@ def get_cli_sessions() -> list:
     except Exception:
         logger.debug("Claude Code session scan failed", exc_info=True)
 
-    # Use the active WebUI profile's HERMES_HOME to find state.db.
-    # The active profile is determined by what the user has selected in the UI
-    # (stored in the server's runtime config). This means:
-    #   - default profile  -> ~/.hermes/state.db
-    #   - named profile X  -> ~/.hermes/profiles/X/state.db
-    # We resolve the active profile's home directory rather than just using
-    # HERMES_HOME (which is the server's launch profile, not necessarily the
-    # active one after a profile switch).
-    try:
-        from api.profiles import get_active_hermes_home
-        hermes_home = Path(get_active_hermes_home()).expanduser().resolve()
-    except Exception:
-        hermes_home = Path(os.getenv('HERMES_HOME', str(HOME / '.hermes'))).expanduser().resolve()
-
-    db_path = hermes_home / 'state.db'
+    # Resolve state.db the same way as lineage metadata: SaaS uses the current
+    # tenant Hermes home; otherwise active profile / HERMES_HOME (see
+    # _active_state_db_path).
+    db_path = _active_state_db_path()
+    hermes_home = db_path.parent
     if not db_path.exists():
         return cli_sessions
 
@@ -1631,12 +1740,7 @@ def get_cli_session_messages(sid) -> list:
     except ImportError:
         return []
 
-    try:
-        from api.profiles import get_active_hermes_home
-        hermes_home = Path(get_active_hermes_home()).expanduser().resolve()
-    except Exception:
-        hermes_home = Path(os.getenv('HERMES_HOME', str(HOME / '.hermes'))).expanduser().resolve()
-    db_path = hermes_home / 'state.db'
+    db_path = _active_state_db_path()
     if not db_path.exists():
         return []
 

@@ -52,13 +52,14 @@ function syncAppTitlebar() {
   let subText = '';
   let sourceLabel = '';
   if (panel === 'chat' && typeof S !== 'undefined' && S && S.session) {
-    mainText = S.session.title || (typeof t === 'function' ? t('untitled') : 'Untitled');
+    mainText = sessionDisplayTitle(S.session.title);
     const vis = Array.isArray(S.messages) ? S.messages.filter(m => m && m.role && m.role !== 'tool') : [];
     if (typeof t === 'function') subText = t('n_messages', vis.length);
     if (S.session.is_cli_session) sourceLabel = S.session.source_label || S.session.source_tag || S.session.raw_source || '';
   } else {
     const key = APP_TITLEBAR_KEYS[panel];
     mainText = key && typeof t === 'function' ? t(key) : (panel.charAt(0).toUpperCase() + panel.slice(1));
+    // if (S && S.currentUserId) subText = `ID: ${S.currentUserId}`;
   }
 
   // Don't touch the element while an inline rename is in progress — replacing
@@ -96,7 +97,9 @@ function syncAppTitlebar() {
       const inp = document.createElement('input');
       inp.type = 'text';
       inp.className = 'app-titlebar-rename-input';
-      inp.value = S.session.title || (typeof t === 'function' ? t('untitled') : 'Untitled');
+      const _rawTitle = S.session.title;
+      inp.value = (typeof _isBackendDefaultSessionTitle === 'function' && _isBackendDefaultSessionTitle(_rawTitle)) ? '' : (_rawTitle || '');
+      inp.placeholder = typeof t === 'function' ? t('new_conversation_placeholder') : 'New conversation';
 
       // Prevent click/dblclick on the input from bubbling — we don't want
       // panel switches, session switches, or any other handler firing.
@@ -107,7 +110,7 @@ function syncAppTitlebar() {
       const finish = async (save) => {
         _renamingAppTitlebar = false;
         if (save) {
-          const newTitle = inp.value.trim() || (typeof t === 'function' ? t('untitled') : 'Untitled');
+          const newTitle = inp.value.trim() || 'Untitled';
           S.session.title = newTitle;
           syncTopbar();   // update #topbarTitle in the chat header
           syncAppTitlebar();
@@ -1699,7 +1702,11 @@ async function loadKanbanBoards(){
   const activeMeta = boards.find(b => b.slug === active) || {slug: active, name: active, icon: '', color: ''};
   const nameEl = document.getElementById('kanbanBoardSwitcherName');
   const iconEl = document.getElementById('kanbanBoardSwitcherIcon');
-  if (nameEl) nameEl.textContent = activeMeta.name || activeMeta.slug || 'Default';
+  if (nameEl) {
+    const rawName = activeMeta.name;
+    const slug = activeMeta.slug;
+    nameEl.textContent = rawName || (slug === 'default' ? t('kanban_board_default') : slug) || t('kanban_board_default');
+  }
   if (iconEl) {
     iconEl.textContent = activeMeta.icon || '';
     if (activeMeta.color) iconEl.style.color = activeMeta.color;
@@ -2177,7 +2184,7 @@ function _renderLlmWikiStatus(d) {
   // becomes config-driven. esc() HTML-escapes but doesn't validate URL scheme.
   const docsUrl = /^https?:\/\//i.test(rawDocsUrl) ? rawDocsUrl : '#';
   const toggleNote = status.toggle_available
-    ? 'Toggle available from configured Hermes Agent setting.'
+    ? 'Toggle available from configured 云千易 Agent setting.'
     : (status.toggle_reason || 'No stable LLM Wiki on/off config flag was detected, so this panel is read-only.');
   const statusNote = isReady
     ? 'LLM Wiki is configured and page metadata is visible without exposing wiki content.'
@@ -4084,7 +4091,7 @@ function switchSettingsSection(name){
 function _syncHermesPanelSessionActions(){
   const hasSession=!!S.session;
   const visibleMessages=hasSession?(S.messages||[]).filter(m=>m&&m.role&&m.role!=='tool').length:0;
-  const title=hasSession?(S.session.title||t('untitled')):t('active_conversation_none');
+  const title=hasSession?sessionDisplayTitle(S.session.title):t('active_conversation_none');
   const meta=$('hermesSessionMeta');
   if(meta){
     meta.textContent=hasSession
@@ -4277,7 +4284,13 @@ function _preferencesPayloadFromUi(){
   const busyInputModeSel=$('settingsBusyInputMode');
   if(busyInputModeSel) payload.busy_input_mode=busyInputModeSel.value;
   const botNameField=$('settingsBotName');
-  if(botNameField) payload.bot_name=botNameField.value;
+  if(botNameField){
+    const raw=String(botNameField.value||'').trim();
+    const bn=(typeof window.canonicalAssistantDisplayName==='function')
+      ? window.canonicalAssistantDisplayName(raw)
+      : raw;
+    payload.bot_name=bn||raw||'云千易';
+  }
   return payload;
 }
 
@@ -4364,12 +4377,12 @@ async function loadSettingsPanel(){
     // tags automatically without any manual release step.
     const webuiBadge = $('settings-webui-version-badge');
     if(webuiBadge){
-      webuiBadge.textContent = `WebUI: ${settings.webui_version || 'not detected'}`;
+      webuiBadge.textContent = `${t('settings_badge_webui')} ${settings.webui_version || t('settings_version_unknown')}`;
     }
     const agentBadge = $('settings-agent-version-badge');
     if(agentBadge){
-      const agentVersion = (settings.agent_version || 'not detected').toString().trim() || 'not detected';
-      agentBadge.textContent = `Agent: ${agentVersion}`;
+      const agentVersion = (settings.agent_version || '').toString().trim() || t('settings_version_unknown');
+      agentBadge.textContent = `${t('settings_badge_agent')} ${agentVersion}`;
     }
     // Hydrate appearance controls first so a slow /api/models request
     // cannot overwrite an in-progress theme/skin selection.
@@ -4503,7 +4516,7 @@ async function loadSettingsPanel(){
       const populateVoices=()=>{
         const voices=speechSynthesis.getVoices();
         const current=localStorage.getItem('hermes-tts-voice')||'';
-        ttsVoiceSel.innerHTML='<option value="">Default system voice</option>';
+        ttsVoiceSel.innerHTML='<option value="">'+esc(t('settings_tts_voice_default'))+'</option>';
         voices.forEach(v=>{
           const opt=document.createElement('option');
           opt.value=v.name;opt.textContent=v.name+(v.lang?' ('+v.lang+')':'');
@@ -4556,7 +4569,13 @@ async function loadSettingsPanel(){
     // Bot name — debounced autosave (text input)
     const botNameField=$('settingsBotName');
     if(botNameField){
-      botNameField.value=settings.bot_name||'Hermes';
+      {
+        const raw=String(settings.bot_name||'').trim();
+        const bn=(typeof window.canonicalAssistantDisplayName==='function')
+          ? window.canonicalAssistantDisplayName(raw)
+          : raw;
+        botNameField.value=bn||raw||'云千易';
+      }
       let botNameTimer=null;
       botNameField.addEventListener('input',()=>{
         if(botNameTimer) clearTimeout(botNameTimer);
@@ -4625,7 +4644,7 @@ async function loadPluginsPanel(){
       list.appendChild(_buildPluginCard(plugin));
     }
   }catch(e){
-    list.innerHTML='<div style="color:var(--error);padding:12px;font-size:13px">Failed to load plugins: '+esc(e.message||String(e))+'</div>';
+    list.innerHTML='<div style="color:var(--error);padding:12px;font-size:13px">'+esc(t('plugins_load_failed'))+' '+esc(e.message||String(e))+'</div>';
   }
 }
 
@@ -4636,21 +4655,21 @@ function _buildPluginCard(plugin){
   const hooks=Array.isArray(plugin&&plugin.hooks)?plugin.hooks:[];
   const hookHtml=hooks.length
     ? hooks.map(h=>`<span class="plugin-hook-badge">${esc(h)}</span>`).join('')
-    : '<span class="plugin-hook-empty">No registered lifecycle hooks</span>';
+    : `<span class="plugin-hook-empty">${esc(t('plugins_no_hooks'))}</span>`;
   const version=(plugin&&plugin.version)?` · v${esc(plugin.version)}`:'';
-  const desc=(plugin&&plugin.description)?esc(plugin.description):'No description provided.';
+  const desc=(plugin&&plugin.description)?esc(plugin.description):esc(t('plugins_no_description'));
   const enabled=plugin&&plugin.enabled!==false;
   card.innerHTML=`
     <div class="provider-card-header plugin-card-header">
       <div class="provider-card-info">
-        <div class="provider-card-name">${esc((plugin&&plugin.name)||'Unnamed plugin')}</div>
+        <div class="provider-card-name">${esc((plugin&&plugin.name)||t('plugins_unnamed'))}</div>
         <div class="provider-card-meta">${esc((plugin&&plugin.key)||'plugin')}${version}</div>
       </div>
-      <span class="provider-card-badge ${enabled?'':'plugin-card-badge-disabled'}">${enabled?'Enabled':'Disabled'}</span>
+      <span class="provider-card-badge ${enabled?'':'plugin-card-badge-disabled'}">${enabled?esc(t('plugins_enabled')):esc(t('plugins_disabled'))}</span>
     </div>
     <div class="provider-card-body plugin-card-body">
       <div class="provider-card-hint">${desc}</div>
-      <div class="provider-card-label">Registered hooks</div>
+      <div class="provider-card-label">${esc(t('plugins_registered_hooks'))}</div>
       <div class="plugin-hook-list">${hookHtml}</div>
     </div>
   `;
@@ -4684,7 +4703,7 @@ async function loadProvidersPanel(){
       list.appendChild(_buildProviderCard(p));
     }
   }catch(e){
-    list.innerHTML='<div style="color:var(--error);padding:12px;font-size:13px">Failed to load providers: '+e.message+'</div>';
+    list.innerHTML='<div style="color:var(--error);padding:12px;font-size:13px">'+esc(t('providers_panel_load_failed'))+' '+esc(e.message||String(e))+'</div>';
   }
 }
 
@@ -4705,17 +4724,17 @@ function _buildProviderQuotaCard(status){
   let body='';
   if(status.status==='available'&&quota){
     body=`
-      <div class="provider-quota-metric"><span>Remaining</span><strong>${esc(_formatProviderQuotaMoney(quota.limit_remaining))}</strong></div>
-      <div class="provider-quota-metric"><span>Used</span><strong>${esc(_formatProviderQuotaMoney(quota.usage))}</strong></div>
-      <div class="provider-quota-metric"><span>Limit</span><strong>${esc(_formatProviderQuotaMoney(quota.limit))}</strong></div>
+      <div class="provider-quota-metric"><span>${esc(t('provider_quota_remaining'))}</span><strong>${esc(_formatProviderQuotaMoney(quota.limit_remaining))}</strong></div>
+      <div class="provider-quota-metric"><span>${esc(t('provider_quota_used'))}</span><strong>${esc(_formatProviderQuotaMoney(quota.usage))}</strong></div>
+      <div class="provider-quota-metric"><span>${esc(t('provider_quota_limit'))}</span><strong>${esc(_formatProviderQuotaMoney(quota.limit))}</strong></div>
     `;
   }else{
-    body=`<div class="provider-quota-message">${esc(status.message||'Quota status unavailable')}</div>`;
+    body=`<div class="provider-quota-message">${esc(status.message||t('providers_quota_unavailable'))}</div>`;
   }
   card.innerHTML=`
     <div class="provider-quota-header">
       <div>
-        <div class="provider-quota-title">Active provider quota</div>
+        <div class="provider-quota-title">${esc(t('provider_quota_title'))}</div>
         <div class="provider-quota-subtitle">${esc(provider)}</div>
       </div>
       <span class="provider-quota-badge">${esc(state.replace(/_/g,' '))}</span>
@@ -5010,7 +5029,13 @@ function _applySavedSettingsUi(saved, body, opts){
   window._simplifiedToolCalling=body.simplified_tool_calling!==false;
   window._sidebarDensity=sidebarDensity==='detailed'?'detailed':'compact';
   window._busyInputMode=body.busy_input_mode||'queue';
-  window._botName=body.bot_name||'Hermes';
+  {
+    const raw=String(body.bot_name||'').trim();
+    const bn=(typeof window.canonicalAssistantDisplayName==='function')
+      ? window.canonicalAssistantDisplayName(raw)
+      : raw;
+    window._botName=bn||raw||'云千易';
+  }
   if(typeof applyBotName==='function') applyBotName();
   if(typeof setLocale==='function') setLocale(language);
   if(typeof applyLocaleToDOM==='function') applyLocaleToDOM();
@@ -5119,8 +5144,13 @@ async function saveSettings(andClose){
   body.sidebar_density=sidebarDensity;
   body.busy_input_mode=busyInputMode;
   body.auto_title_refresh_every=(($('settingsAutoTitleRefresh')||{}).value||'0');
-  const botName=(($('settingsBotName')||{}).value||'').trim();
-  body.bot_name=botName||'Hermes';
+  const botNameRaw=(($('settingsBotName')||{}).value||'').trim();
+  {
+    const bn=(typeof window.canonicalAssistantDisplayName==='function')
+      ? window.canonicalAssistantDisplayName(botNameRaw)
+      : botNameRaw;
+    body.bot_name=bn||botNameRaw||'云千易';
+  }
   // Password: only act if the field has content; blank = leave auth unchanged
   if(pw && pw.trim()){
     try{
@@ -5262,7 +5292,7 @@ const _backgroundErrors=[];  // {session_id, title, message, ts}
 function trackBackgroundError(sessionId, title, message){
   // Only track if user is NOT currently viewing this session
   if(S.session&&S.session.session_id===sessionId) return;
-  _backgroundErrors.push({session_id:sessionId, title:title||t('untitled'), message, ts:Date.now()});
+  _backgroundErrors.push({session_id:sessionId, title:sessionDisplayTitle(title||null), message, ts:Date.now()});
   showErrorBanner();
 }
 
@@ -5405,10 +5435,11 @@ function loadMcpTools(){
 function loadGatewayStatus(){
   const card=$('gatewayStatusCard');
   if(!card) return;
+  card.innerHTML=`<span style="color:var(--muted);font-size:12px">${esc(t('settings_gateway_loading'))}</span>`;
   api('/api/gateway/status').then(r=>{
     if(!r) return;
     if(!r.running){
-      card.innerHTML=`<div style="color:var(--muted);font-size:12px;display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:#ef4444;display:inline-block"></span>Gateway not running</div>`;
+      card.innerHTML=`<div style="color:var(--muted);font-size:12px;display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:#ef4444;display:inline-block"></span>${esc(t('settings_gateway_not_running'))}</div>`;
       return;
     }
     const platformIcons={telegram:'💬',discord:'🎮',slack:'📝',web:'🌐',api:'🔌'};
@@ -5419,10 +5450,11 @@ function loadGatewayStatus(){
         return `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;background:var(--code-bg);border:1px solid var(--border2);border-radius:12px;font-size:12px;font-weight:500">${icon} ${esc(p.label)}</span>`;
       }).join(' ');
     }
-    const lastActive=r.last_active?`<span style="font-size:11px;color:var(--muted)">Last active: ${esc(new Date(r.last_active).toLocaleString())}</span>`:'';
-    const sessionInfo=r.session_count?`<span style="font-size:11px;color:var(--muted)">${r.session_count} session${r.session_count!==1?'s':''}</span>`:'';
-    card.innerHTML=`<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><span style="width:8px;height:8px;border-radius:50%;background:#22c55e;display:inline-block"></span><span style="font-size:13px;font-weight:500;color:#22c55e">Running</span></div>${badges?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">${badges}</div>`:''}<div style="display:flex;gap:12px">${sessionInfo}${lastActive}</div>`;
-  }).catch(()=>{card.innerHTML=`<div style="color:#ef4444;font-size:12px">Failed to load gateway status</div>`});
+    const lastActive=r.last_active?`<span style="font-size:11px;color:var(--muted)">${esc(t('settings_gateway_last_active'))} ${esc(new Date(r.last_active).toLocaleString())}</span>`:'';
+    const sc=Number(r.session_count)||0;
+    const sessionInfo=sc?`<span style="font-size:11px;color:var(--muted)">${esc(sc===1?t('settings_gateway_sessions_one'):t('settings_gateway_sessions_many').replace('{count}',String(sc)))}</span>`:'';
+    card.innerHTML=`<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><span style="width:8px;height:8px;border-radius:50%;background:#22c55e;display:inline-block"></span><span style="font-size:13px;font-weight:500;color:#22c55e">${esc(t('settings_gateway_running'))}</span></div>${badges?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">${badges}</div>`:''}<div style="display:flex;gap:12px">${sessionInfo}${lastActive}</div>`;
+  }).catch(()=>{card.innerHTML=`<div style="color:#ef4444;font-size:12px">${esc(t('settings_gateway_load_failed'))}</div>`});
 }
 // Load MCP servers when system settings tab opens
 const _origSwitchSettings=switchSettingsSection;

@@ -1,8 +1,12 @@
+async function _fetchCancelChatStream(streamId){
+  const href=new URL(`api/chat/cancel?stream_id=${encodeURIComponent(streamId)}`,document.baseURI||location.href).href;
+  await fetch(href,{credentials:'include'});
+}
 async function cancelStream(){
   const streamId = S.activeStreamId;
   if(!streamId) return;
   try{
-    await fetch(new URL(`api/chat/cancel?stream_id=${encodeURIComponent(streamId)}`,document.baseURI||location.href).href,{credentials:'include'});
+    await _fetchCancelChatStream(streamId);
   }catch(e){/* cancel request failed - cleanup below still runs */}
   // Clear status unconditionally after the cancel request completes.
   // The SSE cancel event may also fire, but if the connection is already
@@ -18,7 +22,7 @@ async function cancelSessionStream(session){
   const sid = session&&session.session_id;
   if(!streamId||!sid) return;
   try{
-    await fetch(new URL(`api/chat/cancel?stream_id=${encodeURIComponent(streamId)}`,document.baseURI||location.href).href,{credentials:'include'});
+    await _fetchCancelChatStream(streamId);
   }catch(e){/* cancel request failed - cleanup below still runs */}
   session.active_stream_id=null;
   delete INFLIGHT[sid];
@@ -41,6 +45,15 @@ async function cancelSessionStream(session){
   }
   if(typeof renderSessionList==='function') renderSessionList();
 }
+
+/** Persisted settings may still store the legacy default ``Hermes``; normalize for UI (placeholder, title, etc.). */
+function canonicalAssistantDisplayName(raw){
+  const s=String(raw||'').trim();
+  if(!s) return '';
+  if(/^hermes$/i.test(s)) return '云千易';
+  return s;
+}
+window.canonicalAssistantDisplayName=canonicalAssistantDisplayName;
 
 // ── Mobile navigation ──────────────────────────────────────────────────────
 let _workspacePanelMode='closed'; // 'closed' | 'browse' | 'preview'
@@ -156,7 +169,7 @@ function syncWorkspacePanelUI(){
   if(toggleBtn){
     toggleBtn.classList.toggle('active',isOpen);
     toggleBtn.setAttribute('aria-pressed',isOpen?'true':'false');
-    toggleBtn.title=isOpen?'Hide workspace panel':'Show workspace panel';
+    toggleBtn.title=isOpen?'隐藏工作空间面板':'打开工作空间面板';
     toggleBtn.disabled=!canBrowse;
   }
   if(collapseBtn){
@@ -753,7 +766,10 @@ $('btnNewChat').onclick=async()=>{
      && !S.busy
      && !S.session.active_stream_id
      && !S.session.pending_user_message){
-    $('msg').focus();closeMobileSidebar();return;
+    $('msg').focus();closeMobileSidebar();
+    try { await loadDir('.'); } catch (_) {}
+    if (typeof syncWorkspacePanelUI === 'function') syncWorkspacePanelUI();
+    return;
   }
   await newSession();await renderSessionList();closeMobileSidebar();$('msg').focus();
 };
@@ -932,7 +948,10 @@ document.addEventListener('keydown',async e=>{
        && !S.busy
        && !S.session.active_stream_id
        && !S.session.pending_user_message){
-      $('msg').focus();return;
+      $('msg').focus();
+      try { await loadDir('.'); } catch (_) {}
+      if (typeof syncWorkspacePanelUI === 'function') syncWorkspacePanelUI();
+      return;
     }
     // Cmd/Ctrl+K should always create a new conversation, even while the current
     // one is still streaming. The old !S.busy guard meant users had to wait for
@@ -1214,12 +1233,12 @@ function _buildSkinPicker(activeSkin){
 function applyBotName(){
   // Prefer profile name over global bot_name for personalised placeholder.
   // If activeProfile is set and not 'default', use it (capitalised).
-  // Falls back to window._botName (global bot_name setting) or 'Hermes'.
+  // Falls back to window._botName (global bot_name setting) or '云千易'.
   let name;
   if(S.activeProfile && S.activeProfile!=='default'){
     name=S.activeProfile.charAt(0).toUpperCase()+S.activeProfile.slice(1);
   }else{
-    name=window._botName||'Hermes';
+    name=canonicalAssistantDisplayName(window._botName)||'云千易';
   }
   document.title=name;
   const sidebarH1=document.querySelector('.sidebar-header h1');
@@ -1229,10 +1248,61 @@ function applyBotName(){
   const topbarTitle=$('topbarTitle');
   if(topbarTitle && (!S.session)) topbarTitle.textContent=name;
   const msg=$('msg');
-  if(msg) msg.placeholder='Message '+name+'\u2026';
+  if(msg){
+    let ph='';
+    if(typeof t==='function'){
+      ph=t('composer_placeholder',name);
+      if(ph==='composer_placeholder') ph='';
+    }
+    msg.placeholder=ph||(`Chat with ${name}…`);
+  }
 }
+window.applyBotName=applyBotName;
+
+/** Empty-chat hero line: uses ``empty_title_named`` when ``window._userDisplayName`` is set. */
+window.refreshEmptyChatTitle=function(){
+  const el=document.querySelector('#emptyState h2[data-i18n="empty_title"]');
+  if(!el||typeof t!=='function')return;
+  const n=(window._userDisplayName||'').trim();
+  const k='empty_title_named';
+  if(n){
+    const s=t(k,n);
+    if(s&&s!==k){el.textContent=s;return;}
+  }
+  const fb=t('empty_title');
+  if(fb&&fb!=='empty_title')el.textContent=fb;
+};
 
 (async()=>{
+  // Resolve canonical user before any api() calls — those attach X-User-ID from
+  // localStorage and could beat cookie/JWT identity (same idea as deer-flow clearing
+  // stale cookies before applying the new session).
+  const _cachedUserId=(localStorage.getItem('hermes-user-id')||'').trim();
+  async function _fetchAuthStatusCanonical(){
+    const url=new URL('api/auth/status',document.baseURI||location.href).href;
+    const headers={'Content-Type':'application/json'};
+    const jwt=(localStorage.getItem('hermes-jwt')||'').trim();
+    if(jwt) headers['Authorization']='Bearer '+jwt;
+    const res=await fetch(url,{credentials:'include',headers});
+    return res.json();
+  }
+  try{
+    const authStatus=await _fetchAuthStatusCanonical();
+    const _serverUserId=authStatus&&authStatus.user_id?String(authStatus.user_id).trim():'';
+    S.currentUserId=_serverUserId||null;
+    const _idMismatch=_cachedUserId&&_serverUserId&&_cachedUserId!==_serverUserId;
+    const _staleUserId=_cachedUserId&&!_serverUserId;
+    if(_idMismatch||_staleUserId){
+      if(typeof clearHermesBrowserCachesForUserSwitch==='function') clearHermesBrowserCachesForUserSwitch();
+    }
+    if(_serverUserId) localStorage.setItem('hermes-user-id',_serverUserId);
+    else localStorage.removeItem('hermes-user-id');
+    window._userDisplayName=(authStatus&&authStatus.user_name!=null&&String(authStatus.user_name).trim())||'';
+  }catch(e){
+    S.currentUserId=null;
+    window._userDisplayName='';
+  }
+
   // Load send key preference
   let _bootSettings={};
   try{
@@ -1248,7 +1318,7 @@ function applyBotName(){
     window._simplifiedToolCalling=s.simplified_tool_calling!==false;
     window._sidebarDensity=(s.sidebar_density==='detailed'?'detailed':'compact');
     window._busyInputMode=(s.busy_input_mode||'queue');
-    window._botName=s.bot_name||'Hermes';
+    window._botName=canonicalAssistantDisplayName(s.bot_name)||'云千易';
     if(s.default_model) window._defaultModel=s.default_model;
     // Persist default workspace so the blank new-chat page can show it
     // and workspace actions (New file/folder) work before the first session (#804).
@@ -1282,7 +1352,7 @@ function applyBotName(){
     window._simplifiedToolCalling=true;
     window._sidebarDensity='compact';
     window._busyInputMode='queue';
-    window._botName='Hermes';
+    window._botName='云千易';
     _bootSettings={check_for_updates:false};
     if(typeof setLocale==='function'){
       const _lang=typeof resolvePreferredLocale==='function'
@@ -1346,7 +1416,13 @@ function applyBotName(){
   // Initialize reasoning chip on boot (fixes #1103 — chip hidden until session load)
   if(typeof fetchReasoningChip==='function') fetchReasoningChip();
   const urlSession=(typeof _sessionIdFromLocation==='function')?_sessionIdFromLocation():null;
-  const saved=urlSession||localStorage.getItem('hermes-webui-session');
+  // Open at "/" without ?session=: start in an empty composer, not last tab's conversation.
+  // Deep links (?session= or /session/<id>/) still restore the requested session.
+  let saved=(urlSession||localStorage.getItem('hermes-webui-session'));
+  if(saved && !urlSession){
+    saved=null;
+    try{localStorage.removeItem('hermes-webui-session');}catch(_){}
+  }
   if(saved){
     try{
       await loadSession(saved);
@@ -1363,6 +1439,9 @@ function applyBotName(){
       );
       if(S.session && (S.session.message_count||0) === 0 && !_restoredInFlight){
         S.session=null; S.messages=[];
+        S.entries=[]; S.currentDir='.';
+        if(typeof renderFileTree==='function') renderFileTree();
+        if(typeof renderBreadcrumb==='function') renderBreadcrumb();
         S._bootReady=true;
         // Restore panel pref before syncing so the workspace panel stays visible
         // even though there is no active session (#workspace-persist).
@@ -1370,6 +1449,7 @@ function applyBotName(){
           || localStorage.getItem('hermes-webui-workspace-panel')==='open';
         if(_ephPanelPref) _workspacePanelMode='browse';
         syncTopbar();syncWorkspacePanelState();
+        if(S._profileDefaultWorkspace&&typeof loadDir==='function'){try{await loadDir('.');}catch(_){ }}
         $('emptyState').style.display='';
         await renderSessionList();if(typeof startGatewaySSE==='function')startGatewaySSE();
         return;
@@ -1395,6 +1475,8 @@ function applyBotName(){
     || localStorage.getItem('hermes-webui-workspace-panel')==='open';
   if(_freshPanelPref) _workspacePanelMode='browse';
   syncWorkspacePanelState();
+  if(typeof renderFileTree==='function') renderFileTree();
+  if(S._profileDefaultWorkspace&&typeof loadDir==='function'){try{await loadDir('.');}catch(_){ }}
   $('emptyState').style.display='';
   await renderSessionList();
   // Start real-time gateway session sync if setting is enabled

@@ -573,13 +573,12 @@ def _oauth_payload_has_token(payload: dict) -> bool:
 
 
 
-def _provider_oauth_authenticated(provider: str, hermes_home: "Path") -> bool:
+def _provider_oauth_authenticated(provider: str, hermes_home: "Path | None" = None) -> bool:
     """Return True if the provider has valid OAuth credentials.
 
-    Reads the profile-scoped auth.json directly so onboarding respects the
-    requested Hermes home. Known OAuth providers may store auth either in the
-    legacy providers[provider_id] singleton state or in credential_pool entries
-    used by current Hermes runtime auth resolution.
+    Reads auth.json from *hermes_home* when given (tests / explicit isolation).
+    Otherwise uses :func:`api.config._get_auth_store_path` so SaaS tenants share
+    the host auth store with ``config.yaml``.
     """
     provider = (provider or "").strip().lower()
     if not provider:
@@ -592,7 +591,12 @@ def _provider_oauth_authenticated(provider: str, hermes_home: "Path") -> bool:
     try:
         import json as _j
 
-        auth_path = hermes_home / "auth.json"
+        if hermes_home is not None:
+            auth_path = Path(hermes_home) / "auth.json"
+        else:
+            from api.config import _get_auth_store_path
+
+            auth_path = _get_auth_store_path()
         if not auth_path.exists():
             return False
         store = _j.loads(auth_path.read_text(encoding="utf-8"))
@@ -655,7 +659,7 @@ def _status_from_runtime(cfg: dict, imports_ok: bool) -> dict:
             # third-party providers), then OAuth auth.json.
             provider_ready = (
                 _provider_api_key_present(provider, cfg, env_values)
-                or _provider_oauth_authenticated(provider, _get_active_hermes_home())
+                or _provider_oauth_authenticated(provider)
             )
 
     chat_ready = bool(_HERMES_FOUND and imports_ok and provider_ready)
@@ -663,20 +667,20 @@ def _status_from_runtime(cfg: dict, imports_ok: bool) -> dict:
     if not _HERMES_FOUND or not imports_ok:
         state = "agent_unavailable"
         note = (
-            "Hermes is not fully importable from the Web UI yet. Finish bootstrap or fix the "
+            "云千易 is not fully importable from the Web UI yet. Finish bootstrap or fix the "
             "agent install before provider setup will work."
         )
     elif chat_ready:
         state = "ready"
         provider_name = _PROVIDER_DISPLAY.get(
-            provider, provider.title() if provider else "Hermes"
+            provider, provider.title() if provider else "云千易"
         )
-        note = f"Hermes is minimally configured and ready to chat via {provider_name}."
+        note = f"云千易 is minimally configured and ready to chat via {provider_name}."
     elif provider_configured:
         state = "provider_incomplete"
         if provider == "custom" and not base_url:
             note = (
-                "Hermes has a saved provider/model selection but still needs the "
+                "云千易 has a saved provider/model selection but still needs the "
                 "base URL and API key required to chat."
             )
         elif provider not in _SUPPORTED_PROVIDER_SETUPS:
@@ -688,12 +692,12 @@ def _status_from_runtime(cfg: dict, imports_ok: bool) -> dict:
             )
         else:
             note = (
-                "Hermes has a saved provider/model selection but still needs the "
+                "云千易 has a saved provider/model selection but still needs the "
                 "API key required to chat."
             )
     else:
         state = "needs_provider"
-        note = "Hermes is installed, but you still need to choose a provider and save working credentials."
+        note = "云千易 is installed, but you still need to choose a provider and save working credentials."
 
     return {
         "provider_configured": provider_configured,
@@ -842,7 +846,7 @@ def get_onboarding_status() -> dict:
             "default_workspace": settings.get("default_workspace")
             or str(DEFAULT_WORKSPACE),
             "password_enabled": is_auth_enabled(),
-            "bot_name": settings.get("bot_name") or "Hermes",
+            "bot_name": settings.get("bot_name") or "云千易",
         },
         "system": {
             "hermes_found": bool(_HERMES_FOUND),
@@ -903,7 +907,7 @@ def apply_onboarding_setup(body: dict) -> dict:
         return {
             "error": "config_exists",
             "message": (
-                "Hermes is already configured (config.yaml exists). "
+                "云千易 is already configured (config.yaml exists). "
                 "Pass confirm_overwrite=true to overwrite it."
             ),
             "requires_confirm": True,

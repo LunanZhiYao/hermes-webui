@@ -25,6 +25,18 @@ let _sessionObservedStreaming = null;
 const _sessionStreamingById = new Map();
 const _sessionListSnapshotById = new Map();
 
+/** Lowercase haystack for session search: raw title, localized placeholder, "untitled". */
+function _sessionTitleSearchHaystack(s){
+  if(!s) return '';
+  const raw = String(s.title || '').trim().toLowerCase();
+  let disp = raw;
+  if(typeof sessionDisplayTitle === 'function'){
+    try{ disp = String(sessionDisplayTitle(s.title)).trim().toLowerCase(); }
+    catch(_){ /* ignore */ }
+  }
+  return `${raw} ${disp} untitled`;
+}
+
 function _formatSessionModelWithGateway(s){
   if(!s||!s.model)return'';
   const routing=(typeof _latestGatewayRoutingForSession==='function')?_latestGatewayRoutingForSession(s):(s.gateway_routing||null);
@@ -119,6 +131,18 @@ function _saveSessionObservedStreaming() {
     // Ignore localStorage write failures.
   }
 }
+
+/** Clear chat/session-scoped browser storage when switching users (see deer-flow middleware). */
+function clearHermesBrowserCachesForUserSwitch(){
+  if (typeof window.clearHermesBrowserStorageForUserSwitch === 'function') {
+    window.clearHermesBrowserStorageForUserSwitch();
+  }
+  _sessionViewedCounts = null;
+  _sessionCompletionUnread = null;
+  _sessionObservedStreaming = null;
+  if (typeof window.clearHermesSessionQueuesInMemory === 'function') window.clearHermesSessionQueuesInMemory();
+}
+window.clearHermesBrowserCachesForUserSwitch = clearHermesBrowserCachesForUserSwitch;
 
 function _rememberObservedStreamingSession(s) {
   if (!s || !s.session_id) return;
@@ -324,7 +348,13 @@ async function newSession(flash){
   setStatus('');
   setComposerStatus('');
   updateQueueBadge(S.session.session_id);
-  syncTopbar();renderMessages();loadDir('.');
+  syncTopbar();renderMessages();
+  // Mirror loadSession: await listing so Workspace files appear immediately on first
+  // new chat (#workspace-files / jump into new conversation without clicking sidebar).
+  try {
+    await loadDir('.');
+  } catch (_) { /* avoid breaking newSession — loadSession retry still available */ }
+  if (typeof syncWorkspacePanelUI === 'function') syncWorkspacePanelUI();
   // don't call renderSessionList here - callers do it when needed
 }
 
@@ -364,7 +394,8 @@ async function loadSession(sid){
     const _msgInner = $('msgInner');
     if(_msgInner){
       if(e.status===404){
-        _msgInner.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:14px;padding:40px;text-align:center;">Session not available in web UI.</div>';
+        // 404 时，不显示任何内容，这里本来是会话不存在
+        _msgInner.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:14px;padding:40px;text-align:center;"></div>';
         // If this 404 was for the saved active-session ID (not a click-into request),
         // wipe the stale localStorage value and rethrow so boot can fall through to
         // the empty-state instead of sticking to a broken "Session not available" view.
@@ -514,7 +545,10 @@ async function loadSession(sid){
       updateSendBtn();
       setStatus('');
       setComposerStatus('');
-      syncTopbar();renderMessages();appendThinking();loadDir('.');
+      syncTopbar();renderMessages();appendThinking();
+      try {
+        await loadDir('.');
+      } catch (_) {}
       updateQueueBadge(sid);
       startApprovalPolling(sid);
       if(typeof startClarifyPolling==='function') startClarifyPolling(sid);
@@ -1608,7 +1642,8 @@ function filterSessions(){
   _searchDebounceTimer = setTimeout(async () => {
     try {
       const data = await api(`/api/sessions/search?q=${encodeURIComponent(q)}&content=1&depth=5`);
-      const titleIds = new Set(_allSessions.filter(s => (s.title||'Untitled').toLowerCase().includes(q.toLowerCase())).map(s=>s.session_id));
+      const ql=q.toLowerCase();
+      const titleIds = new Set(_allSessions.filter(s => _sessionTitleSearchHaystack(s).includes(ql)).map(s=>s.session_id));
       _contentSearchResults = (data.sessions||[]).filter(s => s.match_type === 'content' && !titleIds.has(s.session_id));
       renderSessionListFromCache();
     } catch(e) { /* ignore */ }
@@ -1769,7 +1804,7 @@ function _sessionTitleForForkParent(parentSid){
   if(!parentSid||!Array.isArray(_allSessions)) return '';
   const parent=_allSessions.find(item=>item&&item.session_id===parentSid);
   const title=parent&&String(parent.title||'').trim();
-  if(!title||title==='Untitled') return '';
+  if(!title||(typeof _isBackendDefaultSessionTitle==='function'&&_isBackendDefaultSessionTitle(title))) return '';
   return title;
 }
 
@@ -1861,7 +1896,7 @@ function upsertActiveSessionForLocalTurn({title='', messageCount=0, timestampMs=
   S.session.message_count=count;
   S.session.last_message_at=nowSec;
   S.session.updated_at=nowSec;
-  if((S.session.title==='Untitled'||!S.session.title)&&title){
+  if(((typeof _isBackendDefaultSessionTitle==='function')?_isBackendDefaultSessionTitle(S.session.title):(S.session.title==='Untitled'||!S.session.title))&&title){
     S.session.title=title;
   }
   const existingIdx=_allSessions.findIndex(s=>s&&s.session_id===sid);
@@ -1976,7 +2011,7 @@ function renderSessionListFromCache(){
   closeSessionActionMenu();
   const q=($('sessionSearch').value||'').toLowerCase();
   const activeSidForSidebar=_activeSessionIdForSidebar();
-  const titleMatches=q?_allSessions.filter(s=>(s.title||'Untitled').toLowerCase().includes(q)):_allSessions;
+  const titleMatches=q?_allSessions.filter(s=> _sessionTitleSearchHaystack(s).includes(q)):_allSessions;
   // Merge content matches (deduped): content matches appended after title matches
   const titleIds=new Set(titleMatches.map(s=>s.session_id));
   const allMatched=q?[...titleMatches,..._contentSearchResults.filter(s=>!titleIds.has(s.session_id))]:titleMatches;
@@ -2257,7 +2292,7 @@ function renderSessionListFromCache(){
     }
     if(readOnly) el.classList.add('read-only-session');
     if(isActive&&S.session&&S.session._flash)delete S.session._flash;
-    const rawTitle=s.title||'Untitled';
+    const rawTitle=s.title||'';
     const tags=(rawTitle.match(/#[\w-]+/g)||[]);
     let cleanTitle=tags.length?rawTitle.replace(/#[\w-]+/g,'').trim():rawTitle;
     // Guard: system prompt content must never surface as a visible session title
@@ -2299,7 +2334,7 @@ function renderSessionListFromCache(){
     }
     const title=document.createElement('span');
     title.className='session-title';
-    title.textContent=cleanTitle||'Untitled';
+    title.textContent=sessionDisplayTitle(cleanTitle);
     title.title=readOnly?'Read-only imported session':'Double-click to rename';
     const tsMs=_sessionTimestampMs(s);
     const ts=document.createElement('span');
@@ -2371,9 +2406,9 @@ function renderSessionListFromCache(){
         const row=document.createElement('button');
         row.type='button';
         row.className='session-child-session'+(activeSidForSidebar&&child.session_id===activeSidForSidebar?' active':'');
-        const childTitle=child.title||'Untitled child session';
+        const childTitle=sessionDisplayTitle(child.title||null);
         const childTime=_formatRelativeSessionTime(_sessionTimestampMs(child));
-        const parentNote=child._parent_segment_title?` via ${child._parent_segment_title}`:'';
+        const parentNote=child._parent_segment_title?` via ${sessionDisplayTitle(child._parent_segment_title)}`:'';
         row.textContent=`-> ${childTitle}${parentNote} - ${childTime}`;
         row.title='Open child session';
         row.onclick=async(e)=>{
@@ -2411,15 +2446,16 @@ function renderSessionListFromCache(){
 
       closeSessionActionMenu();
       _renamingSid = s.session_id;
-      const oldTitle=s.title||'Untitled';
+      const oldRaw=s.title;
       const inp=document.createElement('input');
       inp.className='session-title-input';
-      inp.value=oldTitle;
+      inp.value=((typeof _isBackendDefaultSessionTitle==='function')&&_isBackendDefaultSessionTitle(oldRaw))?'':(oldRaw||'');
+      inp.placeholder=(typeof t==='function'?t('new_conversation_placeholder'):'New conversation');
       ['click','mousedown','dblclick','pointerdown'].forEach(ev=>
         inp.addEventListener(ev, e2=>e2.stopPropagation())
       );
       const applyTitle=(nextTitle, updateDom=true)=>{
-        if(updateDom) title.textContent=nextTitle;
+        if(updateDom) title.textContent=sessionDisplayTitle(nextTitle);
         s.title=nextTitle;
         const cached=_allSessions.find(item=>item&&item.session_id===s.session_id);
         if(cached) cached.title=nextTitle;
@@ -2436,18 +2472,18 @@ function renderSessionListFromCache(){
           setTimeout(()=>{ if(_renamingSid===null) renderSessionListFromCache(); },50);
         };
         if(!save){
-          applyTitle(oldTitle,false);
+          applyTitle(oldRaw,false);
           releaseRename();
           return;
         }
         const newTitle=inp.value.trim()||'Untitled';
         try{
-          if(newTitle!==oldTitle){
+          if(newTitle!==(oldRaw||'')){
             await api('/api/session/rename',{method:'POST',body:JSON.stringify({session_id:s.session_id,title:newTitle})});
           }
           applyTitle(newTitle);
         }catch(err){
-          applyTitle(oldTitle,false);
+          applyTitle(oldRaw,false);
           const msg='Rename failed: '+(err&&err.message?err.message:String(err));
           setStatus(msg);
           if(typeof showToast==='function') showToast(msg,3000,'error');
@@ -2622,7 +2658,7 @@ async function deleteSession(sid){
     if(remaining.sessions&&remaining.sessions.length){
       await loadSession(remaining.sessions[0].session_id);
     }else{
-      const _tt=$('topbarTitle');if(_tt)_tt.textContent=window._botName||'Hermes';
+      const _tt=$('topbarTitle');if(_tt)_tt.textContent=window._botName||'云千易';
       const _tm=$('topbarMeta');if(_tm)_tm.textContent='Start a new conversation';
       $('msgInner').innerHTML='';
       $('emptyState').style.display='';

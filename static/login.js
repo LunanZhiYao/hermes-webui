@@ -35,23 +35,32 @@ document.addEventListener('DOMContentLoaded', function () {
     } catch (_) { return './'; }
   }
 
+  /** Uses shared hermes-storage-clear.js (same keys as clearHermesBrowserCachesForUserSwitch). */
+  function clearHermesStorageForDifferentUser() {
+    if (typeof window.clearHermesBrowserStorageForUserSwitch === 'function') {
+      window.clearHermesBrowserStorageForUserSwitch();
+    }
+  }
+
   async function doLogin(e) {
     e.preventDefault();
-    var pw = input.value;
+    var workCode = input.value;
     hideErr();
     try {
-      var res = await fetch('api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pw }),
-        credentials: 'include',
-      });
+      var url = 'api/auth/sso-login?workCode=' + encodeURIComponent(workCode);
+      var res = await fetch(url, { method: 'GET', credentials: 'include' });
       var data = {};
       try { data = await res.json(); } catch (_) {}
-      if (res.ok && data.ok) {
+      var user = data && data.data && data.data.user ? data.data.user : {};
+      var userId = user.userid || user.userId || user.workCode || workCode;
+      if (res.ok && data.code === 0 && data.data && data.data.authenticated && userId) {
+        var prevId = '';
+        try { prevId = (localStorage.getItem('hermes-user-id') || '').trim(); } catch (_) {}
+        if (prevId && prevId !== String(userId).trim()) clearHermesStorageForDifferentUser();
+        try { localStorage.setItem('hermes-user-id', userId); } catch (_) {}
         window.location.href = _safeNextPath();
       } else {
-        showErr(data.error || invalidPw);
+        showErr((data && data.msg) || invalidPw);
       }
     } catch (ex) {
       showErr(connFailed);

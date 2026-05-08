@@ -31,6 +31,7 @@ const SHELL_ASSETS = [
   './static/commands.js' + VQ,
   './static/icons.js' + VQ,
   './static/i18n.js' + VQ,
+  './static/hermes-storage-clear.js' + VQ,
   './static/workspace.js' + VQ,
   './static/terminal.js' + VQ,
   './static/onboarding.js' + VQ,
@@ -122,7 +123,7 @@ self.addEventListener('fetch', (event) => {
         return caches.match('./').then((cached) => cached || new Response(
           '<html><body style="font-family:sans-serif;padding:2rem;background:#1a1a1a;color:#ccc">' +
           '<h2>You are offline</h2>' +
-          '<p>Hermes requires a server connection. Please check your network and try again.</p>' +
+          '<p>云千易 requires a server connection. Please check your network and try again.</p>' +
           '</body></html>',
           { headers: { 'Content-Type': 'text/html' } }
         ));

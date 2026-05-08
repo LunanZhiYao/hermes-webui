@@ -22,14 +22,30 @@ logger = logging.getLogger(__name__)
 from api.config import (
     STREAMS, STREAMS_LOCK, CANCEL_FLAGS, AGENT_INSTANCES, STREAM_PARTIAL_TEXT,
     STREAM_REASONING_TEXT, STREAM_LIVE_TOOL_CALLS,
-    LOCK, SESSIONS, SESSION_DIR,
+    LOCK, SESSIONS,
     _get_session_agent_lock, _set_thread_env, _clear_thread_env,
     SESSION_AGENT_LOCKS, SESSION_AGENT_LOCKS_LOCK,
     resolve_model_provider,
     model_with_provider_context,
 )
+from api.runtime_paths import get_session_dir
 from api.helpers import redact_session_data
+from api.workspace import resolve_saas_workspace_path
 from api.metering import meter
+
+
+def _run_with_optional_tenant_snapshot(tenant_snapshot: dict | None, fn, *args, **kwargs):
+    """后台线程默认没有租户 TLS；短时任务需恢复上下文时再写入租户目录。"""
+    if tenant_snapshot:
+        from api.tenant_context import clear_tenant, set_tenant
+
+        set_tenant(**tenant_snapshot)
+    try:
+        return fn(*args, **kwargs)
+    finally:
+        if tenant_snapshot:
+            clear_tenant()
+
 
 # Global lock for os.environ writes. Per-session locks (_agent_lock) prevent
 # concurrent runs of the SAME session, but two DIFFERENT sessions can still
@@ -582,17 +598,23 @@ def _title_prompts(user_text: str, assistant_text: str) -> tuple[str, list[str]]
         (
             "Generate a short session title from this conversation start.\n"
             "Use BOTH the user's question and the assistant's visible answer.\n"
-            "Return only the title text, 3-8 words, as a topic label.\n"
+            "Return only the title text, 3-8 words (or equivalent length in Japanese, Korean, Thai, Vietnamese, Arabic, Hindi, Cyrillic scripts, Chinese ideographs), as a topic label.\n"
+            "The title MUST be written in the same dominant language as the user's question:\n"
+            "mirror the user's language and script choices (avoid translating to English\n"
+            "when the question is primarily not in English).\n"
             "Do not use markdown, bullets, labels, or prefixes like Session Title:.\n"
             "Do not output a full sentence.\n"
             "Do not output acknowledgements or completion phrases like OK, done, or all set.\n"
             "Do not describe internal reasoning.\n"
             "Bad: The user is asking..., OK, all set.\n"
+            "The Good examples below are English only for illustration; your output must follow the user's language.\n"
             "Good: Title Generation Test, Clarify Dialog Layout, GitHub Issue Triage"
         ),
         (
             "Rewrite this conversation start as a concise noun-phrase title.\n"
             "Use the actual topic, not the task outcome.\n"
+            "Write the title in the same dominant language as the user's question;\n"
+            "do not switch to English for summarization unless the user's question itself is largely English.\n"
             "Return title text only.\n"
             "Do not use markdown, bullets, labels, or prefixes like Session Title:.\n"
             "Never output acknowledgements, completion status, or meta commentary."
@@ -958,11 +980,7 @@ def _fallback_title_from_exchange(user_text: str, assistant_text: str) -> Option
     topic_name = _extract_named_topic(combined_raw)
     if topic_name:
         if not _contains_latin(topic_name):
-            if any(k in combined for k in ('time', 'schedule', 'efficiency', 'manage', 'fitness', 'singing', 'calligraphy')):
-                return 'Time management discussion'
-            if any(k in combined for k in ('hermes', 'codex', 'ai')):
-                return 'AI productivity discussion'
-            return 'Conversation topic'
+            return topic_name.strip()[:80]
         if any(k in combined for k in ('time', 'schedule', 'efficiency', 'manage', 'fitness', 'singing', 'calligraphy')):
             return f'{topic_name} time management'
         if any(k in combined for k in ('hermes', 'codex', 'ai')):
@@ -978,7 +996,7 @@ def _fallback_title_from_exchange(user_text: str, assistant_text: str) -> Option
     if any(k in combined for k in ('issue', 'github', 'pr')) and any(k in combined for k in ('triage', 'bug', 'review')):
         return 'GitHub Issue Triage'
 
-    head = re.split(r'[.!?\n]', user_text)[0].strip()
+    head = re.split(r'[.!?。！？\n]', user_text)[0].strip()
     if not head:
         return None
 
@@ -994,7 +1012,8 @@ def _fallback_title_from_exchange(user_text: str, assistant_text: str) -> Option
     latin_word = r'A-Za-z0-9À-ÖØ-öø-ÿ'
     tokens = re.findall(rf'[{latin_word}][{latin_word}_./+-]*', head)
     if not tokens:
-        return 'Conversation topic'
+        excerpt = head.strip()
+        return excerpt[:80] if excerpt else None
 
     picked = []
     for tok in tokens:
@@ -1008,6 +1027,9 @@ def _fallback_title_from_exchange(user_text: str, assistant_text: str) -> Option
 
     if picked:
         return ' '.join(picked)[:60]
+    excerpt = head.strip()
+    if excerpt:
+        return excerpt[:80]
     return 'Conversation topic'
 
 
@@ -1159,7 +1181,7 @@ def _run_background_title_refresh(session_id: str, user_text: str, assistant_tex
         logger.debug("Background title refresh failed for session %s", session_id, exc_info=True)
 
 
-def _maybe_schedule_title_refresh(session, put_event, agent):
+def _maybe_schedule_title_refresh(session, put_event, agent, tenant_snapshot=None):
     """Check if the session is due for an adaptive title refresh and schedule it."""
     refresh_interval = _get_title_refresh_interval()
     if refresh_interval <= 0:
@@ -1176,8 +1198,16 @@ def _maybe_schedule_title_refresh(session, put_event, agent):
     if not last_u and not last_a:
         return
     threading.Thread(
-        target=_run_background_title_refresh,
-        args=(session.session_id, last_u, last_a, current_title, put_event, agent),
+        target=lambda: _run_with_optional_tenant_snapshot(
+            tenant_snapshot,
+            _run_background_title_refresh,
+            session.session_id,
+            last_u,
+            last_a,
+            current_title,
+            put_event,
+            agent,
+        ),
         daemon=True,
     ).start()
 
@@ -1641,6 +1671,8 @@ def _run_agent_streaming(
     *,
     ephemeral=False,
     model_provider=None,
+    tenant_snapshot=None,
+    reasoning_effort_override=None,
 ):
     """Run agent in background thread, writing SSE events to STREAMS[stream_id].
 
@@ -1713,9 +1745,15 @@ def _run_agent_streaming(
     _checkpoint_stop = None
     _ckpt_thread = None
     _agent_lock = None
+    _saas_stream_tenant_restored = False
+    if tenant_snapshot:
+        from api.tenant_context import set_tenant
+
+        set_tenant(**tenant_snapshot)
+        _saas_stream_tenant_restored = True
     try:
         s = get_session(session_id)
-        s.workspace = str(Path(workspace).expanduser().resolve())
+        s.workspace = str(Path(resolve_saas_workspace_path(workspace)).expanduser().resolve())
         s.model = model
         provider_context = (
             str(model_provider).strip().lower()
@@ -1737,7 +1775,12 @@ def _run_agent_streaming(
         # process-level active-profile global.  Falls back gracefully.
         try:
             from api.profiles import get_hermes_home_for_profile, get_profile_runtime_env
-            _profile_home_path = get_hermes_home_for_profile(getattr(s, 'profile', None))
+            from api.tenant_context import get_tenant_hermes_home, saas_enabled
+            _tenant_home = get_tenant_hermes_home() if saas_enabled() else None
+            if _tenant_home is not None:
+                _profile_home_path = _tenant_home
+            else:
+                _profile_home_path = get_hermes_home_for_profile(getattr(s, 'profile', None))
             _profile_home = str(_profile_home_path)
             _profile_runtime_env = get_profile_runtime_env(_profile_home_path)
         except ImportError:
@@ -2016,6 +2059,23 @@ def _run_agent_streaming(
                 _session_db = SessionDB()
             except Exception as _db_err:
                 print(f"[webui] WARNING: SessionDB init failed — session_search will be unavailable: {_db_err}", flush=True)
+
+            # SaaS：租户 HERMES_HOME 下通常没有运维配置的 LLM；WebUI 配置缓存须指向主机侧
+            # config.yaml，且 resolve_runtime_provider 内部 load_config 读的是环境变量 HERMES_HOME。
+            _saas_shared_home = None
+            try:
+                from api.tenant_context import get_tenant_hermes_home, saas_enabled
+
+                if saas_enabled() and get_tenant_hermes_home() is not None:
+                    from api.profiles import get_shared_model_config_home
+
+                    _saas_shared_home = str(get_shared_model_config_home())
+                    from api.config import reload_config
+
+                    reload_config()
+            except Exception as _saas_cfg_err:
+                logger.debug("SaaS shared config reload skipped: %s", _saas_cfg_err)
+
             resolved_model, resolved_provider, resolved_base_url = resolve_model_provider(
                 model_with_provider_context(model, provider_context)
             )
@@ -2023,9 +2083,22 @@ def _run_agent_streaming(
             # Resolve API key via Hermes runtime provider (matches gateway behaviour).
             # Pass the resolved provider so non-default providers get their own credentials.
             resolved_api_key = None
+            _rt = {}
             try:
                 from hermes_cli.runtime_provider import resolve_runtime_provider
-                _rt = resolve_runtime_provider(requested=resolved_provider)
+
+                if _saas_shared_home:
+                    _prev_hh_for_rt = os.environ.get("HERMES_HOME")
+                    os.environ["HERMES_HOME"] = _saas_shared_home
+                    try:
+                        _rt = resolve_runtime_provider(requested=resolved_provider) or {}
+                    finally:
+                        if _prev_hh_for_rt is None:
+                            os.environ.pop("HERMES_HOME", None)
+                        else:
+                            os.environ["HERMES_HOME"] = _prev_hh_for_rt
+                else:
+                    _rt = resolve_runtime_provider(requested=resolved_provider) or {}
                 resolved_api_key = _rt.get("api_key")
                 if not resolved_provider:
                     resolved_provider = _rt.get("provider")
@@ -2046,8 +2119,9 @@ def _run_agent_streaming(
             # Per-session toolset override (#493): if the session has
             # enabled_toolsets set, use that instead of the global config.
             try:
-                from api.models import Session, SESSION_DIR
-                _session_path = SESSION_DIR / f"{session_id}.json"
+                from api.models import Session
+
+                _session_path = get_session_dir() / f"{session_id}.json"
                 if _session_path.exists():
                     _session_meta = Session.load_metadata_only(session_id)
                     # load_metadata_only returns a Session INSTANCE, not a dict.
@@ -2113,10 +2187,18 @@ def _run_agent_streaming(
             # active profile's config.yaml (the same key the CLI writes via
             # `/reasoning <level>`) and hand the parsed dict to AIAgent.  When
             # the key is absent or invalid, pass None → agent uses its default.
+            # Optional per-request override (WebUI localStorage / shared deployments)
+            # wins over config.yaml without mutating the file.
             try:
                 from api.config import parse_reasoning_effort as _parse_reff
-                _effort_cfg = _cfg.get('agent', {}) if isinstance(_cfg, dict) else {}
-                _effort_raw = _effort_cfg.get('reasoning_effort') if isinstance(_effort_cfg, dict) else None
+                _effort_raw = None
+                if reasoning_effort_override is not None:
+                    _ov = str(reasoning_effort_override).strip().lower()
+                    if _ov and _ov != 'default':
+                        _effort_raw = _ov
+                if _effort_raw is None:
+                    _effort_cfg = _cfg.get('agent', {}) if isinstance(_cfg, dict) else {}
+                    _effort_raw = _effort_cfg.get('reasoning_effort') if isinstance(_effort_cfg, dict) else None
                 _reasoning_config = _parse_reff(_effort_raw)
             except Exception:
                 _reasoning_config = None
@@ -2604,8 +2686,8 @@ def _run_agent_streaming(
                     old_sid = session_id
                     new_sid = _agent_sid
                     # Rename the session file
-                    old_path = SESSION_DIR / f'{old_sid}.json'
-                    new_path = SESSION_DIR / f'{new_sid}.json'
+                    old_path = get_session_dir() / f'{old_sid}.json'
+                    new_path = get_session_dir() / f'{new_sid}.json'
                     s.session_id = new_sid
                     with LOCK:
                         if old_sid in SESSIONS:
@@ -2842,8 +2924,16 @@ def _run_agent_streaming(
             put('metering', meter_stats)
             if _should_bg_title and _u0 and _a0:
                 threading.Thread(
-                    target=_run_background_title_update,
-                    args=(s.session_id, _u0, _a0, str(s.title or '').strip(), put, agent),
+                    target=lambda: _run_with_optional_tenant_snapshot(
+                        tenant_snapshot,
+                        _run_background_title_update,
+                        s.session_id,
+                        _u0,
+                        _a0,
+                        str(s.title or '').strip(),
+                        put,
+                        agent,
+                    ),
                     daemon=True,
                 ).start()
             else:
@@ -2854,7 +2944,7 @@ def _run_agent_streaming(
                 # Adaptive title refresh: re-generate title from latest exchange
                 # every N exchanges (when enabled in settings). Runs after stream_end
                 # so it doesn't block the stream.
-                _maybe_schedule_title_refresh(s, put, agent)
+                _maybe_schedule_title_refresh(s, put, agent, tenant_snapshot=tenant_snapshot)
         finally:
             # Stop the live metering ticker
             _metering_stop.set()
@@ -3059,6 +3149,10 @@ def _run_agent_streaming(
                 and getattr(s, 'active_stream_id', None) == stream_id
                 and getattr(s, 'pending_user_message', None)):
             _last_resort_sync_from_core(s, stream_id, _agent_lock)
+        if _saas_stream_tenant_restored:
+            from api.tenant_context import clear_tenant
+
+            clear_tenant()
         _clear_thread_env()  # TD1: always clear thread-local context
         with STREAMS_LOCK:
             STREAMS.pop(stream_id, None)

@@ -1,6 +1,29 @@
 """
-Hermes Web UI -- Route handlers for GET and POST endpoints.
-Extracted from server.py (Sprint 11) so server.py is a thin shell.
+Hermes Web UI — HTTP 路由集中实现（api/routes.py）
+
+职责概述
+--------
+- 由 ``server.py`` 中的 ``Handler`` 按 HTTP 方法分派到本模块的
+  ``handle_get`` / ``handle_post`` / ``handle_patch`` / ``handle_delete``。
+- 每个 handler 返回 ``True`` 表示已处理该请求（含 JSON/HTML/静态文件/SSE 等）；
+  返回 ``False`` 表示未匹配路由，外层通常会当作 **404**。
+- **认证**：页面与 API 的放行策略以 ``api/auth.check_auth`` 为准（在 ``server.py``
+  调用路由函数之前执行）；本文件内的某些路径仍会做二次校验（如 CSRF、租户上下文）。
+
+路由大致分区（GET 为主）
+------------------------
+- **壳层页面**：``/``、``/session/...`` 返回 SPA HTML；``/login`` SaaS/门禁登录页；
+  ``/session/static/...`` 带会话前缀的静态资源路径。
+- **认证与健康**：``/api/auth/*``（status、sso-login、health 等），与 deer-flow 对齐的字段约定。
+- **PWA**：``manifest.json``、``sw.js`` 等。
+- **会话与聊天**：``/api/session/*``、流式 ``/api/chat/stream``、附件上传相关 GET 等。
+- **侧车数据**：设置、模型、项目、Profile、Skills、Memory、Cron、MCP、Rollback 等 REST 分组。
+- 更多分支见函数体内 ``# ── ... ──`` 分段注释（中英对照）。
+
+约定
+----
+- 优先阅读各 ``handle_*`` 开头的说明；复杂逻辑已拆到同文件 helper 或 ``api/*`` 子模块。
+- 修改路由时注意 **SaaS 多租户**：依赖 ``server.py`` 注入的租户路径（见 ``api/tenant_*``）。
 """
 
 import html as _html
@@ -435,7 +458,6 @@ def _clear_live_models_cache() -> None:
 
 from api.config import (
     STATE_DIR,
-    SESSION_DIR,
     DEFAULT_WORKSPACE,
     DEFAULT_MODEL,
     SESSIONS,
@@ -462,11 +484,13 @@ from api.config import (
     set_hermes_default_model,
     model_with_provider_context,
     get_reasoning_status,
+    preview_reasoning_effort_setting,
     set_reasoning_display,
     set_reasoning_effort,
     create_stream_channel,
     get_webui_session_save_mode,
 )
+from api.runtime_paths import get_session_dir, get_session_index_path
 from api.helpers import (
     require,
     bad,
@@ -1366,6 +1390,7 @@ from api.workspace import (
 )
 from api.upload import handle_upload, handle_upload_extract, handle_transcribe
 from api.streaming import _sse, _run_agent_streaming, cancel_stream
+from api.tenant_context import snapshot_tenant_context
 from api.providers import get_providers, get_provider_quota, set_provider_key, remove_provider_key
 from api.onboarding import (
     apply_onboarding_setup,
@@ -1524,11 +1549,11 @@ except ImportError:
 _LOGIN_LOCALE = {
     "en": {
         "lang": "en",
-        "title": "Sign in",
-        "subtitle": "Enter your password to continue",
-        "placeholder": "Password",
-        "btn": "Sign in",
-        "invalid_pw": "Invalid password",
+        "title": "Access restricted",
+        "subtitle": "Please enter through Cloud Lunan",
+        "placeholder": "",
+        "btn": "",
+        "invalid_pw": "Invalid workCode",
         "conn_failed": "Connection failed",
     },
     "es": {
@@ -1560,11 +1585,11 @@ _LOGIN_LOCALE = {
     },
     "zh": {
         "lang": "zh-CN",
-        "title": "\u767b\u5f55",
-        "subtitle": "\u8f93\u5165\u5bc6\u7801\u7ee7\u7eed\u4f7f\u7528",
-        "placeholder": "\u5bc6\u7801",
-        "btn": "\u767b\u5f55",
-        "invalid_pw": "\u5bc6\u7801\u9519\u8bef",
+        "title": "\u8bbf\u95ee\u53d7\u9650",
+        "subtitle": "\u8bf7\u4f7f\u7528\u4e91\u4e0a\u9c81\u5357\u8fdb\u5165",
+        "placeholder": "",
+        "btn": "",
+        "invalid_pw": "workCode \u65e0\u6548",
         "conn_failed": "\u8fde\u63a5\u5931\u8d25",
     },
     "zh-Hant": {
@@ -1654,29 +1679,17 @@ body{background:#1a1a2e;color:#e8e8f0;font-family:-apple-system,BlinkMacSystemFo
   display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;color:#fff;
   margin:0 auto 12px;box-shadow:0 2px 12px rgba(233,69,96,.3)}
 h1{font-size:18px;font-weight:600;margin-bottom:4px}
-.sub{font-size:12px;color:#8888aa;margin-bottom:24px}
-input{width:100%;padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.1);
-  background:rgba(255,255,255,.04);color:#e8e8f0;font-size:14px;outline:none;margin-bottom:14px;
-  transition:border-color .15s}
-input:focus{border-color:rgba(124,185,255,.5);box-shadow:0 0 0 3px rgba(124,185,255,.1)}
-button{width:100%;padding:10px;border-radius:10px;border:none;background:rgba(124,185,255,.15);
-  border:1px solid rgba(124,185,255,.3);color:#7cb9ff;font-size:14px;font-weight:600;cursor:pointer;
-  transition:all .15s}
-button:hover{background:rgba(124,185,255,.25)}
-.err{color:#e94560;font-size:12px;margin-top:10px;display:none}
+.sub{font-size:13px;color:#c8c8da;margin:14px 0 8px}
+.hint{font-size:12px;color:#8888aa}
 </style></head><body>
 <div class="card">
   <div class="logo">{{BOT_NAME_INITIAL}}</div>
-  <h1>{{BOT_NAME}}</h1>
+  <h1>{{LOGIN_TITLE}}</h1>
   <p class="sub">{{LOGIN_SUBTITLE}}</p>
-  <form id="login-form" data-invalid-pw="{{LOGIN_INVALID_PW}}" data-conn-failed="{{LOGIN_CONN_FAILED}}">
-    <input type="password" id="pw" placeholder="{{LOGIN_PLACEHOLDER}}" autofocus>
-    <button type="submit">{{LOGIN_BTN}}</button>
-  </form>
-  <div class="err" id="err"></div>
+  <p class="hint">{{LOGIN_CONN_FAILED}}</p>
 </div>
-<!-- Keep login.js relative so subpath mounts load it under the current scope. -->
-<script src="static/login.js?v={{WEBUI_VERSION}}"></script>
+<script defer src="static/hermes-storage-clear.js?v={{WEBUI_VERSION}}"></script>
+<script defer src="static/login.js?v={{WEBUI_VERSION}}"></script>
 </body></html>"""
 
 
@@ -2008,7 +2021,7 @@ def _handle_insights(handler, parsed) -> bool:
 
     # Walk session index (fast, no full JSON parse)
     sessions_data = []
-    idx_path = SESSION_DIR / "_index.json"
+    idx_path = get_session_index_path()
     if idx_path.exists():
         try:
             idx = json.loads(idx_path.read_text(encoding="utf-8"))
@@ -2367,8 +2380,17 @@ def _handle_plugins(handler, parsed) -> bool:
 
 
 def handle_get(handler, parsed) -> bool:
-    """Handle all GET routes. Returns True if handled, False for 404."""
+    """处理全部 GET 请求。
 
+    :param handler: ``BaseHTTPRequestHandler`` 实例（写响应头/体）。
+    :param parsed: ``urllib.parse.urlparse`` 结果，常用 ``parsed.path`` / ``parsed.query``。
+    :return: ``True`` 已处理；``False`` 未匹配（通常 404）。
+
+    分支顺序注意：更具体的路径前缀应写在通用前缀之前；静态资源与 `/api/*`
+    分散在全文各处，搜索 ``parsed.path`` 可快速定位。
+    """
+
+    # ── 静态：`/session/static/` → 去掉 `/session` 前缀后交给 `_serve_static` ──
     if parsed.path.startswith("/session/static/"):
         # Strip the leading "/session" so _serve_static() sees a path that
         # starts with "/static/" (its required prefix). _serve_static enforces
@@ -2376,6 +2398,7 @@ def handle_get(handler, parsed) -> bool:
         stripped = parsed._replace(path=parsed.path[len("/session"):])
         return _serve_static(handler, stripped)
 
+    # ── 主应用 HTML：根路径与 `/session/<id>` 深链均返回同一套前端入口（注入扩展脚本等）──
     if parsed.path in ("/", "/index.html") or parsed.path.startswith("/session/"):
         from urllib.parse import quote
         from api.updates import WEBUI_VERSION
@@ -2389,43 +2412,141 @@ def handle_get(handler, parsed) -> bool:
             content_type="text/html; charset=utf-8",
         )
 
+    # ── SaaS / 门禁登录页：极简 HTML；文案来自 `_LOGIN_LOCALE`，`?error=` 提示口令或 workCode 失败 ──
     if parsed.path == "/login":
-        _settings = load_settings()
-        _bn = _html.escape(_settings.get("bot_name") or "Hermes")
-        _lang = _settings.get("language", "en")
-        _login_strings = _LOGIN_LOCALE[
-            _resolve_login_locale_key(_lang)
-        ]
-        from urllib.parse import quote
-        from api.updates import WEBUI_VERSION
-        version_token = quote(WEBUI_VERSION, safe="")
-        _page = (
-            _LOGIN_PAGE_HTML.replace("{{BOT_NAME}}", _bn)
-            .replace("{{BOT_NAME_INITIAL}}", _bn[0].upper())
-            .replace("{{WEBUI_VERSION}}", version_token)
-            .replace("{{LANG}}", _html.escape(_login_strings["lang"]))
-            .replace("{{LOGIN_TITLE}}", _html.escape(_login_strings["title"]))
-            .replace("{{LOGIN_SUBTITLE}}", _html.escape(_login_strings["subtitle"]))
-            .replace(
-                "{{LOGIN_PLACEHOLDER}}", _html.escape(_login_strings["placeholder"])
+        try:
+            _settings = load_settings()
+            _bn_raw = str(_settings.get("bot_name") or "云千易")
+            _bn = _html.escape(_bn_raw) or "云千易"
+            _lang = _settings.get("language", "en")
+            _login_strings = _LOGIN_LOCALE[_resolve_login_locale_key(_lang)]
+            _q = parse_qs(parsed.query or "")
+            _err = (_q.get("error", [""])[0] or "").strip().lower()
+            if _err == "invalid_workcode":
+                _login_strings = dict(_login_strings)
+                _login_strings["subtitle"] = _login_strings.get("invalid_pw") or _login_strings.get("subtitle")
+            # 登录页不再依赖版本号注入，避免因版本模块异常导致 500。
+            version_token = "na"
+            _page = (
+                _LOGIN_PAGE_HTML.replace("{{BOT_NAME}}", _bn)
+                .replace("{{BOT_NAME_INITIAL}}", (_bn[:1] or "云"))
+                .replace("{{WEBUI_VERSION}}", version_token)
+                .replace("{{LANG}}", _html.escape(str(_login_strings.get("lang") or "en")))
+                .replace("{{LOGIN_TITLE}}", _html.escape(str(_login_strings.get("title") or "Access restricted")))
+                .replace("{{LOGIN_SUBTITLE}}", _html.escape(str(_login_strings.get("subtitle") or "Please enter through Cloud Lunan")))
+                .replace("{{LOGIN_PLACEHOLDER}}", _html.escape(str(_login_strings.get("placeholder") or "")))
+                .replace("{{LOGIN_BTN}}", _html.escape(str(_login_strings.get("btn") or "")))
+                .replace("{{LOGIN_INVALID_PW}}", _html.escape(str(_login_strings.get("invalid_pw") or "Invalid workCode")))
+                .replace("{{LOGIN_CONN_FAILED}}", _html.escape(str(_login_strings.get("conn_failed") or "Please enter through Cloud Lunan")))
             )
-            .replace("{{LOGIN_BTN}}", _html.escape(_login_strings["btn"]))
-            .replace("{{LOGIN_INVALID_PW}}", _html.escape(_login_strings["invalid_pw"]))
-            .replace(
-                "{{LOGIN_CONN_FAILED}}", _html.escape(_login_strings["conn_failed"])
+            return t(handler, _page, content_type="text/html; charset=utf-8")
+        except Exception:
+            # 最后兜底：即使模板渲染异常，也返回固定拦截页，避免 500。
+            _fallback = (
+                "<!doctype html><html><head><meta charset='utf-8'>"
+                "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+                "<title>Access restricted</title></head>"
+                "<body style='font-family:system-ui;background:#1a1a2e;color:#e8e8f0;"
+                "display:flex;align-items:center;justify-content:center;height:100vh;'>"
+                "<div style='max-width:360px;text-align:center;'>"
+                "<h2>访问受限</h2><p>请使用云上鲁南进入</p></div></body></html>"
             )
-        )
-        return t(handler, _page, content_type="text/html; charset=utf-8")
+            return t(handler, _fallback, content_type="text/html; charset=utf-8")
 
+    # ── 认证状态探针：前端 boot / 登录态判断；返回 user_id、logged_in、WebUI 自有 SSO cookie 标志 ──
     if parsed.path == "/api/auth/status":
-        from api.auth import is_auth_enabled, parse_cookie, verify_session
+        # 对齐 deer-flow：除了 logged_in 外，返回 authenticated/user_id 供前端统一读取。
+        from api.auth import (
+            _parse_cookie_value,
+            get_authenticated_display_name,
+            get_authenticated_user_id,
+            is_auth_enabled,
+            parse_cookie,
+            verify_session,
+        )
 
         logged_in = False
+        user_id = get_authenticated_user_id(handler)
+        user_name = get_authenticated_display_name(handler)
         if is_auth_enabled():
             cv = parse_cookie(handler)
             logged_in = bool(cv and verify_session(cv))
-        return j(handler, {"auth_enabled": is_auth_enabled(), "logged_in": logged_in})
+        if user_id:
+            logged_in = True
+        # 使用 WebUI 自有 cookie，避免与 deer-flow 跨项目共享登录态。
+        webui_auth = (_parse_cookie_value(handler, "hermes_webui_auth") or "").strip().lower() == "true"
+        return j(
+            handler,
+            {
+                "auth_enabled": is_auth_enabled(),
+                "logged_in": logged_in,
+                "user_id": user_id,
+                "user_name": user_name,
+                "authenticated": logged_in or webui_auth,
+            },
+        )
 
+    # ── 认证服务健康检查（与 deer-flow 响应形状兼容，便于网关探测）──
+    if parsed.path == "/api/auth/health":
+        # 对齐 deer-flow auth health 接口返回结构。
+        return j(handler, {"code": 0, "msg": "ok", "data": {"status": "healthy", "service": "deer-flow-auth"}})
+
+    # ── ERP SSO：表单或脚本使用 workCode 换票；成功则 Set-Cookie（hermes_webui_*）并返回用户信息 JSON ──
+    if parsed.path == "/api/auth/sso-login":
+        # 协议对齐 deer-flow：`GET /api/auth/sso-login?workCode=...`
+        # Cookie 使用 WebUI 自有键名，避免与 deer-flow 同域项目串会话。
+        from api.auth import extract_work_code_with_meta, log_work_code_parse_result, set_webui_sso_cookies
+        from api.erp_auth import login_by_work_code
+
+        # 使用模块级 `parse_qs`；禁止在 handle_get 内再 `import parse_qs`，
+        # 否则 Python 会把整个函数里的 parse_qs 视为局部变量，前面分支会 UnboundLocalError。
+
+        query = parse_qs(parsed.query or "", keep_blank_values=False)
+        work_code, wc_meta = extract_work_code_with_meta(handler, query)
+        log_work_code_parse_result(
+            where="api/auth/sso-login",
+            path=parsed.path,
+            work_code=work_code,
+            meta=wc_meta,
+            extra=f"query_len={len(parsed.query or '')}",
+        )
+        if not work_code:
+            return j(handler, {"code": 401, "msg": "workCode is required", "data": None})
+        try:
+            user_info = login_by_work_code(work_code)
+        except ValueError:
+            return j(handler, {"code": 401, "msg": "workCode is required", "data": None})
+        except Exception as exc:
+            logger.exception("SSO login failed: %s", exc)
+            return j(handler, {"code": 500, "msg": f"认证失败: {exc}", "data": None})
+        if not user_info:
+            return j(handler, {"code": 401, "msg": "ERP认证失败", "data": None})
+        user_id = str(user_info.get("userid") or user_info.get("userId") or user_info.get("workCode") or work_code).strip()
+        if not user_id:
+            return j(handler, {"code": 401, "msg": "ERP认证失败", "data": None})
+        user_name = user_info.get("name") or user_id
+        api_user = {
+            "userid": user_id,
+            "name": user_name,
+            "workCode": user_info.get("workCode") or work_code,
+            "email": user_info.get("email"),
+            "department": user_info.get("department") or user_info.get("dept"),
+            "position": user_info.get("position") or user_info.get("title"),
+            "mobile": user_info.get("mobile") or user_info.get("phone"),
+            "avatar": user_info.get("avatar") or user_info.get("headimgurl"),
+        }
+        handler.send_response(200)
+        handler.send_header("Content-Type", "application/json")
+        handler.send_header("Cache-Control", "no-store")
+        _security_headers(handler)
+        set_webui_sso_cookies(handler, user_id=user_id, user_name=user_name)
+        handler.end_headers()
+        handler.wfile.write(
+            json.dumps({"code": 0, "msg": "ok", "data": {"user": api_user, "authenticated": True}}).encode("utf-8")
+        )
+        return True
+
+    # ── PWA 清单：安装到桌面/全屏所需 ──
     if parsed.path in ("/manifest.json", "/manifest.webmanifest"):
         static_root = Path(__file__).parent.parent / "static"
         manifest_path = (static_root / "manifest.json").resolve()
@@ -2440,6 +2561,7 @@ def handle_get(handler, parsed) -> bool:
             return True
         return j(handler, {"error": "not found"}, status=404)
 
+    # ── Service Worker：离线壳与静态资源策略（版本见文件内逻辑）──
     if parsed.path == "/sw.js":
         static_root = Path(__file__).parent.parent / "static"
         sw_path = (static_root / "sw.js").resolve()
@@ -2463,6 +2585,7 @@ def handle_get(handler, parsed) -> bool:
             return True
         return j(handler, {"error": "not found"}, status=404)
 
+    # ── 站点图标（无文件时 204，避免浏览器控制台刷 404）──
     if parsed.path == "/favicon.ico":
         static_root = Path(__file__).parent.parent / "static"
         ico_path = (static_root / "favicon.ico").resolve()
@@ -2479,10 +2602,11 @@ def handle_get(handler, parsed) -> bool:
             handler.end_headers()
         return True
 
-    # ── Insights / knowledge status ──
+    # ── Insights / 知识库状态（聚合索引构建进度等）──
     if parsed.path == "/api/insights":
         return _handle_insights(handler, parsed)
 
+    # ── 看板桥接（Kanban UI 与后端列表/配置）──
     if parsed.path.startswith("/api/kanban/"):
         from api.kanban_bridge import handle_kanban_get
 
@@ -2492,6 +2616,7 @@ def handle_get(handler, parsed) -> bool:
     if parsed.path == "/api/logs":
         return _handle_logs(handler, parsed)
 
+    # ── 进程级健康检查（与 accept-loop 心跳等，供编排/探针使用）──
     if parsed.path == "/health":
         return _handle_health(handler, parsed)
 
@@ -2523,11 +2648,11 @@ def handle_get(handler, parsed) -> bool:
             bad(handler, str(exc), status=400)
         return True
 
-    # ── Providers (GET) ──
+    # ── Providers (GET) — 模型/推理供应商注册信息（供设置页与路由展示）──
     if parsed.path == "/api/providers":
         return j(handler, get_providers())
 
-    # ── Plugins/hooks visibility (read-only, no callback/source internals) ──
+    # ── Plugins（GET）— 插件与钩子可见性列表，只读，不含源码/回调细节 ──
     if parsed.path == "/api/plugins":
         return _handle_plugins(handler, parsed)
     if parsed.path == "/api/provider/quota":
@@ -2766,7 +2891,11 @@ def handle_get(handler, parsed) -> bool:
         sid = parse_qs(parsed.query).get("session_id", [""])[0]
         if not sid:
             return bad(handler, "Missing session_id")
-        return j(handler, {"yolo_enabled": is_session_yolo_enabled(sid)})
+        try:
+            return j(handler, {"yolo_enabled": is_session_yolo_enabled(sid)})
+        except Exception as exc:
+            logger.exception("session/yolo failed for %s: %s", sid, exc)
+            return j(handler, {"yolo_enabled": False})
 
     if parsed.path == "/api/session/usage":
         sid = parse_qs(parsed.query).get("session_id", [""])[0]
@@ -2906,6 +3035,9 @@ def handle_get(handler, parsed) -> bool:
     if parsed.path == "/api/list":
         return _handle_list_dir(handler, parsed)
 
+    if parsed.path == "/api/workspace/default-list":
+        return _handle_list_default_workspace(handler, parsed)
+
     if parsed.path == "/api/personalities":
         # Read personalities from config.yaml agent.personalities section
         # (matches hermes-agent CLI behavior, not filesystem SOUL.md approach)
@@ -2934,52 +3066,58 @@ def handle_get(handler, parsed) -> bool:
         if not sid:
             return bad(handler, "session_id required")
         try:
-            s = get_session(sid)
-        except KeyError:
-            return bad(handler, "Session not found", 404)
-        from api.workspace import git_info_for_workspace
-
-        info = git_info_for_workspace(Path(s.workspace))
-        return j(handler, {"git": info})
+            try:
+                s = get_session(sid)
+            except KeyError:
+                return bad(handler, "Session not found", 404)
+            from api.workspace import git_info_for_workspace
+            info = git_info_for_workspace(Path(s.workspace))
+            return j(handler, {"git": info})
+        except Exception as exc:
+            logger.exception("git-info failed for session %s: %s", sid, exc)
+            return j(handler, {"git": {"is_git": False}})
 
     if parsed.path == "/api/commands":
         from api.commands import list_commands
         return j(handler, {"commands": list_commands()})
 
     if parsed.path == "/api/updates/check":
-        settings = load_settings()
-        if not settings.get("check_for_updates", True):
-            return j(handler, {"disabled": True})
-        qs = parse_qs(parsed.query)
-        force = qs.get("force", ["0"])[0] == "1"
-        # ?simulate=1 returns fake behind counts for UI testing (localhost only)
-        if (
-            qs.get("simulate", ["0"])[0] == "1"
-            and handler.client_address[0] == "127.0.0.1"
-        ):
-            return j(
-                handler,
-                {
-                    "webui": {
-                        "name": "webui",
-                        "behind": 3,
-                        "current_sha": "abc1234",
-                        "latest_sha": "def5678",
-                        "branch": "master",
+        try:
+            settings = load_settings()
+            if not settings.get("check_for_updates", True):
+                return j(handler, {"disabled": True})
+            qs = parse_qs(parsed.query)
+            force = qs.get("force", ["0"])[0] == "1"
+            # ?simulate=1 returns fake behind counts for UI testing (localhost only)
+            if (
+                qs.get("simulate", ["0"])[0] == "1"
+                and handler.client_address[0] == "127.0.0.1"
+            ):
+                return j(
+                    handler,
+                    {
+                        "webui": {
+                            "name": "webui",
+                            "behind": 3,
+                            "current_sha": "abc1234",
+                            "latest_sha": "def5678",
+                            "branch": "master",
+                        },
+                        "agent": {
+                            "name": "agent",
+                            "behind": 1,
+                            "current_sha": "aaa0001",
+                            "latest_sha": "bbb0002",
+                            "branch": "master",
+                        },
+                        "checked_at": 0,
                     },
-                    "agent": {
-                        "name": "agent",
-                        "behind": 1,
-                        "current_sha": "aaa0001",
-                        "latest_sha": "bbb0002",
-                        "branch": "master",
-                    },
-                    "checked_at": 0,
-                },
-            )
-        from api.updates import check_for_updates
-
-        return j(handler, check_for_updates(force=force))
+                )
+            from api.updates import check_for_updates
+            return j(handler, check_for_updates(force=force))
+        except Exception as exc:
+            logger.exception("updates/check failed: %s", exc)
+            return j(handler, {"disabled": True, "error": "updates_check_failed"})
 
     if parsed.path == "/api/chat/stream/status":
         stream_id = parse_qs(parsed.query).get("stream_id", [""])[0]
@@ -3048,10 +3186,10 @@ def handle_get(handler, parsed) -> bool:
         except KeyError as e:
             return bad(handler, str(e), 404)
 
-    # ── Cron API (GET) ──
-    # All cron handlers touch cron.jobs which resolves HERMES_HOME from
-    # os.environ (process-global) at call time. Wrap in cron_profile_context
-    # so the TLS-active profile's jobs.json is read, not the process default.
+    # ── Cron API（GET）— 定时任务列表、输出、历史、运行状态等 ──
+    # 说明：cron.jobs 会在调用时解析 HERMES_HOME（进程级环境变量）。
+    # 必须通过 cron_profile_context() 包一层，才能读到当前 TLS 活动 profile 的 jobs.json，
+    # 而不是进程默认目录。
     if parsed.path == "/api/crons":
         from cron.jobs import list_jobs
         from api.profiles import cron_profile_context
@@ -3089,15 +3227,20 @@ def handle_get(handler, parsed) -> bool:
         with cron_profile_context():
             return _handle_cron_status(handler, parsed)
 
-    # ── Skills API (GET) ──
+    # ── Skills API（GET）— Agent 技能清单与单个技能正文/附属文件 ──
     if parsed.path == "/api/skills":
+        from api.profiles import get_active_hermes_home
+        from api.skills_runtime import skills_tool_paths_for_home
         from tools.skills_tool import skills_list as _skills_list
 
-        raw = _skills_list()
+        with skills_tool_paths_for_home(get_active_hermes_home()):
+            raw = _skills_list()
         data = json.loads(raw) if isinstance(raw, str) else raw
         return j(handler, {"skills": data.get("skills", [])})
 
     if parsed.path == "/api/skills/content":
+        from api.profiles import get_active_hermes_home
+        from api.skills_runtime import skills_tool_paths_for_home
         from tools.skills_tool import skill_view as _skill_view, SKILLS_DIR
 
         qs = parse_qs(parsed.query)
@@ -3105,41 +3248,42 @@ def handle_get(handler, parsed) -> bool:
         if not name:
             return j(handler, {"error": "name required"}, status=400)
         file_path = qs.get("file", [""])[0]
-        if file_path:
-            # Serve a linked file from the skill directory
-            import re as _re
+        with skills_tool_paths_for_home(get_active_hermes_home()):
+            if file_path:
+                # Serve a linked file from the skill directory
+                import re as _re
 
-            if _re.search(r"[*?\[\]]", name):
-                return bad(handler, "Invalid skill name", 400)
-            skill_dir = None
-            for p in SKILLS_DIR.rglob(name):
-                if p.is_dir():
-                    skill_dir = p
-                    break
-            if not skill_dir:
-                return bad(handler, "Skill not found", 404)
-            target = (skill_dir / file_path).resolve()
-            try:
-                target.relative_to(skill_dir.resolve())
-            except ValueError:
-                return bad(handler, "Invalid file path", 400)
-            if not target.exists() or not target.is_file():
-                return bad(handler, "File not found", 404)
-            return j(
-                handler,
-                {"content": target.read_text(encoding="utf-8"), "path": file_path},
-            )
-        raw = _skill_view(name)
+                if _re.search(r"[*?\[\]]", name):
+                    return bad(handler, "Invalid skill name", 400)
+                skill_dir = None
+                for p in SKILLS_DIR.rglob(name):
+                    if p.is_dir():
+                        skill_dir = p
+                        break
+                if not skill_dir:
+                    return bad(handler, "Skill not found", 404)
+                target = (skill_dir / file_path).resolve()
+                try:
+                    target.relative_to(skill_dir.resolve())
+                except ValueError:
+                    return bad(handler, "Invalid file path", 400)
+                if not target.exists() or not target.is_file():
+                    return bad(handler, "File not found", 404)
+                return j(
+                    handler,
+                    {"content": target.read_text(encoding="utf-8"), "path": file_path},
+                )
+            raw = _skill_view(name)
         data = json.loads(raw) if isinstance(raw, str) else raw
         if not isinstance(data.get("linked_files"), dict):
             data["linked_files"] = {}
         return j(handler, data)
 
-    # ── Memory API (GET) ──
+    # ── Memory API（GET）— 用户/会话记忆侧车读取 ──
     if parsed.path == "/api/memory":
         return _handle_memory_read(handler)
 
-    # ── Profile API (GET) ──
+    # ── Profile API（GET）— 多 Hermes 根目录（profile）列表与当前活动项 ──
     if parsed.path == "/api/profiles":
         from api.profiles import list_profiles_api, get_active_profile_name
 
@@ -3156,7 +3300,7 @@ def handle_get(handler, parsed) -> bool:
             {"name": get_active_profile_name(), "path": str(get_active_hermes_home())},
         )
 
-    # ── Gateway Status (GET) ──
+    # ── Gateway Status（GET）— 网关侧会话元数据、连接平台摘要（Telegram/Discord 等）──
     if parsed.path == "/api/gateway/status":
         import datetime
         identity_map = _load_gateway_session_identity_map()
@@ -3193,15 +3337,15 @@ def handle_get(handler, parsed) -> bool:
             "session_count": len(identity_map),
         })
 
-    # ── MCP Servers (GET) ──
+    # ── MCP Servers（GET）— 已配置的 MCP Server 列表 ──
     if parsed.path == "/api/mcp/servers":
         return _handle_mcp_servers_list(handler)
 
-    # ── MCP Tools (GET) ──
+    # ── MCP Tools（GET）— 聚合可用 MCP 工具清单 ──
     if parsed.path == "/api/mcp/tools":
         return _handle_mcp_tools_list(handler)
 
-    # ── Checkpoints / Rollback (GET) ──
+    # ── Checkpoints / Rollback（GET）— 工作区检查点列表与 diff ──
     if parsed.path == "/api/rollback/list":
         qs = parse_qs(parsed.query)
         workspace = qs.get("workspace", [""])[0]
@@ -3234,15 +3378,20 @@ def handle_get(handler, parsed) -> bool:
     return False  # 404
 
 
-# ── GET route helpers
+# ── GET 辅助函数：放在 ``handle_post`` 之前仅为文件分区；具体定义在模块后部 ``_serve_static`` 等 ──
 
 
 def handle_post(handler, parsed) -> bool:
-    """Handle all POST routes. Returns True if handled, False for 404."""
-    # CSRF: reject cross-origin browser requests
+    """处理全部 POST 请求（JSON 表单、上传、聊天、设置持久化等）。
+
+    约定：须先通过 ``_check_csrf``（浏览器跨站 POST 拒绝）；正文由 ``read_body`` 解析。
+    返回 ``True`` 表示已响应；``False`` 表示未匹配路由（通常 404）。
+    """
+    # CSRF：浏览器发起的跨站 POST 一律 403（API 仅信任同源或带正确 Origin/Referer 的策略，见实现）
     if not _check_csrf(handler):
         return j(handler, {"error": "Cross-origin request rejected"}, status=403)
 
+    # 以下 `/api/upload*`、`/api/transcribe` 走 multipart / 专用处理器，不使用下方 JSON ``body``
     if parsed.path == "/api/upload":
         return handle_upload(handler)
     if parsed.path == "/api/upload/extract":
@@ -3253,6 +3402,7 @@ def handle_post(handler, parsed) -> bool:
 
     body = read_body(handler)
 
+    # 看板桥接 POST（创建列、卡片、排序等，具体见 kanban_bridge）
     if parsed.path.startswith("/api/kanban/"):
         from api.kanban_bridge import handle_kanban_post
 
@@ -3269,6 +3419,7 @@ def handle_post(handler, parsed) -> bool:
             bad(handler, str(exc), status=500)
         return True
 
+    # ── 会话生命周期（POST）：新建、复制、压缩、重试/撤销、分叉等（详见各分支）──
     if parsed.path == "/api/session/new":
         try:
             workspace = str(resolve_trusted_workspace(body.get("workspace"))) if body.get("workspace") else None
@@ -3361,7 +3512,7 @@ def handle_post(handler, parsed) -> bool:
         except RuntimeError as e:
             return bad(handler, str(e), 500)
 
-    # ── Providers (POST) ──
+    # ── Providers（POST）— 写入/删除 BYOK API Key，与 CLI 共用凭据存储策略 ──
     if parsed.path == "/api/providers":
         provider_id = (body.get("provider") or "").strip().lower()
         api_key = body.get("api_key")
@@ -3391,9 +3542,14 @@ def handle_post(handler, parsed) -> bool:
         #   {"display": "show"|"hide"|"on"|"off"}   → display.show_reasoning
         #   {"effort":  "none"|"minimal"|"low"|"medium"|"high"|"xhigh"}
         #                                            → agent.reasoning_effort
+        # With ``{"persist": false}`` alongside ``effort``, validate and return
+        # status without writing config.yaml (per-browser prefs + /api/chat/start).
         try:
             display = body.get("display")
             effort = body.get("effort")
+            persist = body.get("persist", True)
+            if isinstance(persist, str):
+                persist = str(persist).strip().lower() in ("1", "true", "yes", "on")
             if display is not None:
                 flag = str(display).strip().lower()
                 if flag in ("show", "on", "true", "1"):
@@ -3402,6 +3558,15 @@ def handle_post(handler, parsed) -> bool:
                     return j(handler, set_reasoning_display(False))
                 return bad(handler, f"display must be show|hide|on|off (got '{display}')")
             if effort is not None:
+                if not persist:
+                    try:
+                        normalized = preview_reasoning_effort_setting(effort)
+                    except ValueError as e:
+                        return bad(handler, str(e))
+                    out = dict(get_reasoning_status())
+                    out["reasoning_effort"] = normalized
+                    out["persisted"] = False
+                    return j(handler, out)
                 return j(handler, set_reasoning_effort(effort))
             return bad(handler, "reasoning: must supply 'display' or 'effort'")
         except ValueError as e:
@@ -3563,15 +3728,16 @@ def handle_post(handler, parsed) -> bool:
         with LOCK:
             SESSIONS.pop(sid, None)
         try:
-            SESSION_INDEX_FILE.unlink(missing_ok=True)
+            get_session_index_path().unlink(missing_ok=True)
         except Exception:
             logger.debug("Failed to unlink session index")
         # Evict cached agent so turn count doesn't leak into a recycled session
         from api.config import _evict_session_agent
         _evict_session_agent(sid)
         try:
-            p = (SESSION_DIR / f"{sid}.json").resolve()
-            p.relative_to(SESSION_DIR.resolve())
+            _session_dir = get_session_dir().resolve()
+            p = (_session_dir / f"{sid}.json").resolve()
+            p.relative_to(_session_dir)
         except Exception:
             return bad(handler, "Invalid session_id", 400)
         try:
@@ -3748,14 +3914,8 @@ def handle_post(handler, parsed) -> bool:
         except ValueError as e:
             return j(handler, {"error": str(e)})
 
-    # ── YOLO mode toggle (POST) ──
-    # Session-scoped only — stored in-memory on the server side.
-    # Important lifecycle notes:
-    #   • Page reload: state PERSISTS (frontend re-fetches via GET endpoint)
-    #   • Cross-tab: state is SHARED (same server-side flag per session)
-    #   • Server restart: state is LOST (in-memory only)
-    #   • Cross-session: isolated (each session has its own flag)
-    # Fixes #467
+    # ── YOLO 模式开关（POST）— 仅会话级；服务端内存标记 ──
+    # 生命周期：刷新页面仍存在（前端再拉 GET）；同会话多标签共享；进程重启丢失；会话间隔离。（#467）
     if parsed.path == "/api/session/yolo":
         try:
             require(body, "session_id")
@@ -3784,6 +3944,7 @@ def handle_post(handler, parsed) -> bool:
     if parsed.path == "/api/background":
         return _handle_background(handler, body)
 
+    # ── 聊天与终端（POST）— start/sync/steer、内嵌 xterm 会话生命周期 ──
     if parsed.path == "/api/chat/start":
         return _handle_chat_start(handler, body)
 
@@ -3806,9 +3967,7 @@ def handle_post(handler, parsed) -> bool:
     if parsed.path == "/api/terminal/close":
         return _handle_terminal_close(handler, body)
 
-    # ── Cron API (POST) ──
-    # See GET-side comment above: wrap in cron_profile_context so writes go
-    # to the TLS-active profile's jobs.json instead of the process default.
+    # ── Cron API（POST）— 创建/更新/删除/触发定时任务；须 ``cron_profile_context`` 写对 profile 的 jobs.json
     if parsed.path == "/api/crons/create":
         from api.profiles import cron_profile_context
 
@@ -3845,7 +4004,7 @@ def handle_post(handler, parsed) -> bool:
         with cron_profile_context():
             return _handle_cron_resume(handler, body)
 
-    # ── File ops (POST) ──
+    # ── 工作区文件操作（POST）— 当前会话 workspace 下的删/写/建/改名/显式 reveal ──
     if parsed.path == "/api/file/delete":
         return _handle_file_delete(handler, body)
 
@@ -3864,7 +4023,7 @@ def handle_post(handler, parsed) -> bool:
     if parsed.path == "/api/file/reveal":
         return _handle_file_reveal(handler, body)
 
-    # ── Workspace management (POST) ──
+    # ── Workspace 列表管理（POST）— 用户可切换的工作目录集合（增删改排序）──
     if parsed.path == "/api/workspaces/add":
         return _handle_workspace_add(handler, body)
 
@@ -3877,26 +4036,26 @@ def handle_post(handler, parsed) -> bool:
     if parsed.path == "/api/workspaces/reorder":
         return _handle_workspace_reorder(handler, body)
 
-    # ── Approval (POST) ──
+    # ── 工具审批卡片（POST）— 用户允许/拒绝 agent 敏感操作 ──
     if parsed.path == "/api/approval/respond":
         return _handle_approval_respond(handler, body)
 
-    # ── Clarify (POST) ──
+    # ── 澄清追问卡片（POST）— 用户对 agent 追问提交答案 ──
     if parsed.path == "/api/clarify/respond":
         return _handle_clarify_respond(handler, body)
 
-    # ── Skills (POST) ──
+    # ── Skills（POST）— 保存/删除用户侧技能覆盖（SKILL.md 等）──
     if parsed.path == "/api/skills/save":
         return _handle_skill_save(handler, body)
 
     if parsed.path == "/api/skills/delete":
         return _handle_skill_delete(handler, body)
 
-    # ── Memory (POST) ──
+    # ── Memory（POST）— 写入侧车记忆片段（与 agent memory 管线配合）──
     if parsed.path == "/api/memory/write":
         return _handle_memory_write(handler, body)
 
-    # ── Profile API (POST) ──
+    # ── Profile API（POST）— 切换 Hermes 根（cookie + 失效模型缓存）；勿与 SaaS 租户混淆 ──
     if parsed.path == "/api/profile/switch":
         name = body.get("name", "").strip()
         if not name:
@@ -3922,6 +4081,7 @@ def handle_post(handler, parsed) -> bool:
         except RuntimeError as e:
             return bad(handler, str(e), 409)
 
+    # ── Profile 创建（POST）— 磁盘上新 Hermes 根；校验命名与可选克隆 ──
     if parsed.path == "/api/profile/create":
         name = body.get("name", "").strip()
         if not name:
@@ -3956,6 +4116,7 @@ def handle_post(handler, parsed) -> bool:
         except (ValueError, FileExistsError, RuntimeError) as e:
             return bad(handler, str(e))
 
+    # ── Profile 删除（POST）──
     if parsed.path == "/api/profile/delete":
         name = body.get("name", "").strip()
         if not name:
@@ -3971,7 +4132,7 @@ def handle_post(handler, parsed) -> bool:
         except RuntimeError as e:
             return bad(handler, str(e), 409)
 
-    # ── Settings (POST) ──
+    # ── Settings（POST）— 持久化 WebUI 设置（bot 名、主题、密码哈希等）；含启用密码后的 cookie 刷新逻辑 ──
     if parsed.path == "/api/settings":
         from api.auth import (
             create_session,
@@ -3982,7 +4143,7 @@ def handle_post(handler, parsed) -> bool:
         )
 
         if "bot_name" in body:
-            body["bot_name"] = (str(body["bot_name"]) or "").strip() or "Hermes"
+            body["bot_name"] = (str(body["bot_name"]) or "").strip() or "云千易"
 
         auth_enabled_before = is_auth_enabled()
         current_cookie = parse_cookie(handler)
@@ -4131,7 +4292,7 @@ def handle_post(handler, parsed) -> bool:
         except Exception as e:
             return bad(handler, f"probe failed: {e}", 500)
 
-    # ── Session pin (POST) ──
+    # ── 会话置顶（POST）──
     if parsed.path == "/api/session/pin":
         try:
             require(body, "session_id")
@@ -4146,7 +4307,7 @@ def handle_post(handler, parsed) -> bool:
             s.save()
         return j(handler, {"ok": True, "session": s.compact()})
 
-    # ── Session archive (POST) ──
+    # ── 会话归档（POST）；含 CLI/网关导入会话的惰性物化逻辑 ──
     if parsed.path == "/api/session/archive":
         try:
             require(body, "session_id")
@@ -4212,7 +4373,7 @@ def handle_post(handler, parsed) -> bool:
             s.save(touch_updated_at=False)
         return j(handler, {"ok": True, "session": s.compact()})
 
-    # ── Session move to project (POST) ──
+    # ── 会话归属项目（POST）；校验目标 project 与当前 profile 一致（#1614）──
     if parsed.path == "/api/session/move":
         try:
             require(body, "session_id")
@@ -4240,7 +4401,7 @@ def handle_post(handler, parsed) -> bool:
             s.save()
         return j(handler, {"ok": True, "session": s.compact()})
 
-    # ── Project CRUD (POST) ──
+    # ── Project CRUD（POST）— 侧边栏项目分组；带 profile 归属 ──
     if parsed.path == "/api/projects/create":
         try:
             require(body, "name")
@@ -4313,9 +4474,10 @@ def handle_post(handler, parsed) -> bool:
         projects = [p for p in projects if p["project_id"] != body["project_id"]]
         save_projects(projects)
         # Unassign all sessions that belonged to this project
-        if SESSION_INDEX_FILE.exists():
+        _session_index = get_session_index_path()
+        if _session_index.exists():
             try:
-                index = json.loads(SESSION_INDEX_FILE.read_text(encoding="utf-8"))
+                index = json.loads(_session_index.read_text(encoding="utf-8"))
                 for entry in index:
                     if entry.get("project_id") == body["project_id"]:
                         try:
@@ -4328,11 +4490,11 @@ def handle_post(handler, parsed) -> bool:
                 logger.debug("Failed to load session index for project unlink")
         return j(handler, {"ok": True})
 
-    # ── Session import from JSON (POST) ──
+    # ── 从 JSON 导入会话（POST）──
     if parsed.path == "/api/session/import":
         return _handle_session_import(handler, body)
 
-    # ── Self-update (POST) ──
+    # ── WebUI / Agent 自检更新应用（POST）──
     if parsed.path == "/api/updates/apply":
         target = body.get("target", "")
         if target not in ("webui", "agent"):
@@ -4349,11 +4511,11 @@ def handle_post(handler, parsed) -> bool:
 
         return j(handler, apply_force_update(target))
 
-    # ── CLI session import (POST) ──
+    # ── 从 CLI 导出导入会话（POST）──
     if parsed.path == "/api/session/import_cli":
         return _handle_session_import_cli(handler, body)
 
-    # ── Auth endpoints (POST) ──
+    # ── 密码登录 / 登出（POST）；与 WebUI ``hermes_session`` cookie 生命周期绑定 ──
     if parsed.path == "/api/auth/login":
         from api.auth import (
             verify_password,
@@ -4401,7 +4563,7 @@ def handle_post(handler, parsed) -> bool:
         handler.wfile.write(json.dumps({"ok": True}).encode())
         return True
 
-    # ── Checkpoints / Rollback (POST) ──
+    # ── Rollback 恢复到检查点（POST）──
     if parsed.path == "/api/rollback/restore":
         if not body:
             return bad(handler, "request body is required")
@@ -4422,7 +4584,7 @@ def handle_post(handler, parsed) -> bool:
 
 
 def handle_patch(handler, parsed) -> bool:
-    """Handle all PATCH routes. Returns True if handled, False for 404."""
+    """处理 PATCH（当前主要用于 Kanban 局部更新）。"""
     if not _check_csrf(handler):
         return j(handler, {"error": "Cross-origin request rejected"}, status=403)
     body = read_body(handler)
@@ -4434,7 +4596,7 @@ def handle_patch(handler, parsed) -> bool:
 
 
 def handle_delete(handler, parsed) -> bool:
-    """Handle all DELETE routes. Returns True if handled, False for 404."""
+    """处理 DELETE（当前主要用于 Kanban 资源删除）。"""
     if not _check_csrf(handler):
         return j(handler, {"error": "Cross-origin request rejected"}, status=403)
     body = read_body(handler)
@@ -4444,7 +4606,7 @@ def handle_delete(handler, parsed) -> bool:
         return handle_kanban_delete(handler, parsed, body)
     return False
 
-# ── GET route helpers ─────────────────────────────────────────────────────────
+# ── 静态文件 MIME 与 ``_serve_static`` 等 GET 辅助实现（见下方）────────────────
 
 # MIME types for static file serving. Hoisted to module scope to avoid
 # rebuilding the dict on every request.
@@ -4555,6 +4717,32 @@ def _handle_sessions_search(handler, parsed):
             except (KeyError, Exception):
                 pass
     return j(handler, {"sessions": results, "query": q, "count": len(results)})
+
+
+def _handle_list_default_workspace(handler, parsed):
+    """List directory under /api/settings ``default_workspace`` (profile / tenant ``workspace/``).
+
+    Same JSON shape as ``/api/list`` so the Workspace panel can show files before
+    the user has opened a chat session (no ``session_id`` yet).
+    """
+    qs = parse_qs(parsed.query)
+    rel_path = (qs.get("path", ["."]) or ["."])[0]
+    try:
+        from api.workspace import _profile_default_workspace, list_dir, resolve_trusted_workspace
+
+        root = resolve_trusted_workspace(_profile_default_workspace())
+        return j(
+            handler,
+            {
+                "entries": list_dir(root, rel_path),
+                "path": rel_path,
+            },
+        )
+    except (FileNotFoundError, ValueError) as e:
+        return bad(handler, _sanitize_error(e), 404)
+    except Exception as exc:
+        logger.exception("workspace default-list failed: %s", exc)
+        return bad(handler, _sanitize_error(exc), 500)
 
 
 def _handle_list_dir(handler, parsed):
@@ -5701,7 +5889,7 @@ def _handle_memory_read(handler):
 
 def _handle_sessions_cleanup(handler, body, zero_only=False):
     cleaned = 0
-    for p in SESSION_DIR.glob("*.json"):
+    for p in get_session_dir().glob("*.json"):
         if p.name.startswith("_"):
             continue
         try:
@@ -5717,8 +5905,9 @@ def _handle_sessions_cleanup(handler, body, zero_only=False):
                 cleaned += 1
         except Exception:
             logger.debug("Failed to clean up session file %s", p)
-    if SESSION_INDEX_FILE.exists():
-        SESSION_INDEX_FILE.unlink(missing_ok=True)
+    _session_index = get_session_index_path()
+    if _session_index.exists():
+        _session_index.unlink(missing_ok=True)
     return j(handler, {"ok": True, "cleaned": cleaned})
 
 
@@ -5768,10 +5957,17 @@ def _handle_btw(handler, body):
         STREAMS[stream_id] = stream
     from api.background import track_btw
     track_btw(body["session_id"], ephemeral.session_id, stream_id, question)
+    _btw_kw = {
+        "ephemeral": True,
+        "model_provider": model_provider,
+        "tenant_snapshot": snapshot_tenant_context(),
+    }
+    if "reasoning_effort" in body:
+        _btw_kw["reasoning_effort_override"] = body.get("reasoning_effort")
     thr = threading.Thread(
         target=_run_agent_streaming,
         args=(ephemeral.session_id, question, s.model, s.workspace, stream_id, None),
-        kwargs={"ephemeral": True, "model_provider": model_provider},
+        kwargs=_btw_kw,
         daemon=True,
     )
     thr.start()
@@ -5817,6 +6013,7 @@ def _handle_background(handler, body):
     parent_sid = body["session_id"]
     bg_sid = bg.session_id
     track_background(parent_sid, bg_sid, stream_id, task_id, prompt)
+    _bg_tenant_snapshot = snapshot_tenant_context()
 
     def _run_bg_and_notify():
         """Run the background agent, then mark the tracked task `done` with the
@@ -5825,6 +6022,12 @@ def _handle_background(handler, body):
         `get_results()` would see a forever-`running` task and return nothing.
         """
         try:
+            _bg_kw = {
+                "model_provider": model_provider,
+                "tenant_snapshot": _bg_tenant_snapshot,
+            }
+            if "reasoning_effort" in body:
+                _bg_kw["reasoning_effort_override"] = body.get("reasoning_effort")
             _run_agent_streaming(
                 bg_sid,
                 prompt,
@@ -5832,7 +6035,7 @@ def _handle_background(handler, body):
                 s.workspace,
                 stream_id,
                 None,
-                model_provider=model_provider,
+                **_bg_kw,
             )
             # Reload the bg session from disk and extract the final assistant reply.
             try:
@@ -5855,7 +6058,7 @@ def _handle_background(handler, body):
             # clutter the sidebar or SESSION_DIR. The index is pruned on the
             # next rebuild via _index_entry_exists().
             try:
-                (SESSION_DIR / f"{bg_sid}.json").unlink(missing_ok=True)
+                (get_session_dir() / f"{bg_sid}.json").unlink(missing_ok=True)
             except Exception:
                 pass
         except Exception:
@@ -5991,10 +6194,16 @@ def _handle_chat_start(handler, body):
     stream = create_stream_channel()
     with STREAMS_LOCK:
         STREAMS[stream_id] = stream
+    _re_kw = {
+        "model_provider": model_provider,
+        "tenant_snapshot": snapshot_tenant_context(),
+    }
+    if "reasoning_effort" in body:
+        _re_kw["reasoning_effort_override"] = body.get("reasoning_effort")
     thr = threading.Thread(
         target=_run_agent_streaming,
         args=(s.session_id, msg, model, workspace, stream_id, attachments),
-        kwargs={"model_provider": model_provider},
+        kwargs=_re_kw,
         daemon=True,
     )
     thr.start()
@@ -7554,21 +7763,25 @@ def _handle_skill_save(handler, body):
     category = body.get("category", "").strip()
     if category and ("/" in category or ".." in category):
         return bad(handler, "Invalid category")
+    from api.profiles import get_active_hermes_home
+    from api.skills_runtime import skills_tool_paths_for_home
     from tools.skills_tool import SKILLS_DIR
 
-    if category:
-        skill_dir = SKILLS_DIR / category / skill_name
-    else:
-        skill_dir = SKILLS_DIR / skill_name
-    # Validate resolved path stays within SKILLS_DIR
-    try:
-        skill_dir.resolve().relative_to(SKILLS_DIR.resolve())
-    except ValueError:
-        return bad(handler, "Invalid skill path")
-    skill_dir.mkdir(parents=True, exist_ok=True)
-    skill_file = skill_dir / "SKILL.md"
-    skill_file.write_text(body["content"], encoding="utf-8")
-    return j(handler, {"ok": True, "name": skill_name, "path": str(skill_file)})
+    with skills_tool_paths_for_home(get_active_hermes_home()):
+        if category:
+            skill_dir = SKILLS_DIR / category / skill_name
+        else:
+            skill_dir = SKILLS_DIR / skill_name
+        # Validate resolved path stays within SKILLS_DIR
+        try:
+            skill_dir.resolve().relative_to(SKILLS_DIR.resolve())
+        except ValueError:
+            return bad(handler, "Invalid skill path")
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        skill_file = skill_dir / "SKILL.md"
+        skill_file.write_text(body["content"], encoding="utf-8")
+        out_path = str(skill_file)
+    return j(handler, {"ok": True, "name": skill_name, "path": out_path})
 
 
 def _handle_skill_delete(handler, body):
@@ -7576,14 +7789,17 @@ def _handle_skill_delete(handler, body):
         require(body, "name")
     except ValueError as e:
         return bad(handler, str(e))
+    from api.profiles import get_active_hermes_home
+    from api.skills_runtime import skills_tool_paths_for_home
     from tools.skills_tool import SKILLS_DIR
     import shutil
 
-    matches = list(SKILLS_DIR.rglob(f"{body['name']}/SKILL.md"))
-    if not matches:
-        return bad(handler, "Skill not found", 404)
-    skill_dir = matches[0].parent
-    shutil.rmtree(str(skill_dir))
+    with skills_tool_paths_for_home(get_active_hermes_home()):
+        matches = list(SKILLS_DIR.rglob(f"{body['name']}/SKILL.md"))
+        if not matches:
+            return bad(handler, "Skill not found", 404)
+        skill_dir = matches[0].parent
+        shutil.rmtree(str(skill_dir))
     return j(handler, {"ok": True, "name": body["name"]})
 
 

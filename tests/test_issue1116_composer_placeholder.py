@@ -34,8 +34,8 @@ class TestComposerPlaceholderProfile:
         m = re.search(r'function applyBotName\(\)\{.*?\n\}', src, re.DOTALL)
         assert m, "applyBotName function must exist"
         body = m.group(0)
-        assert "window._botName||'Hermes'" in body, \
-            "applyBotName must fall back to window._botName or 'Hermes'"
+        assert "window._botName||'云千易'" in body, \
+            "applyBotName must fall back to window._botName or '云千易'"
 
     def test_switchToProfile_calls_applyBotName(self):
         """switchToProfile() must call applyBotName() after switching."""
@@ -50,11 +50,13 @@ class TestComposerPlaceholderProfile:
         assert "applyBotName" in after, \
             "switchToProfile must call applyBotName after profile switch"
 
-    def test_placeholder_uses_name_variable(self):
-        """The composer placeholder must use the resolved name variable."""
+    def test_placeholder_uses_product_copy(self):
+        """Composer placeholder uses the fixed Chinese prompt line (not Message <name>)."""
         src = _src("boot.js")
         m = re.search(r'function applyBotName\(\)\{.*?\n\}', src, re.DOTALL)
         assert m, "applyBotName function must exist"
         body = m.group(0)
-        assert re.search(r"msg\.placeholder\s*=\s*.*Message.*name", body), \
-            "applyBotName must set composer placeholder to 'Message <name>…'"
+        assert re.search(
+            r"msg\.placeholder\s*=\s*['\"]对话 云千易\.\.\.['\"]",
+            body,
+        ), "applyBotName must set composer placeholder to 对话 云千易..."

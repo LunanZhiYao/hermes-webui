@@ -34,11 +34,11 @@ def post(path, body=None):
 # ── Default value ─────────────────────────────────────────────────────────
 
 def test_settings_default_bot_name():
-    """GET /api/settings should return bot_name defaulting to 'Hermes'."""
+    """GET /api/settings should return bot_name defaulting to '云千易'."""
     d, status = get("/api/settings")
     assert status == 200
     assert "bot_name" in d
-    assert d["bot_name"] == "Hermes"
+    assert d["bot_name"] == "云千易"
 
 
 # ── Round-trip ────────────────────────────────────────────────────────────
@@ -52,7 +52,7 @@ def test_settings_set_bot_name():
         d2, _ = get("/api/settings")
         assert d2.get("bot_name") == "TestBot"
     finally:
-        post("/api/settings", {"bot_name": "Hermes"})
+        post("/api/settings", {"bot_name": "云千易"})
 
 
 def test_settings_bot_name_special_chars():
@@ -63,41 +63,41 @@ def test_settings_bot_name_special_chars():
         d2, _ = get("/api/settings")
         assert d2.get("bot_name") == "My Assistant 2.0"
     finally:
-        post("/api/settings", {"bot_name": "Hermes"})
+        post("/api/settings", {"bot_name": "云千易"})
 
 
 # ── Server-side sanitization ──────────────────────────────────────────────
 
-def test_settings_empty_bot_name_defaults_to_hermes():
-    """Posting an empty bot_name should default to 'Hermes' server-side."""
+def test_settings_empty_bot_name_defaults_to_yunqianyi():
+    """Posting an empty bot_name should default to '云千易' server-side."""
     try:
         d, status = post("/api/settings", {"bot_name": ""})
         assert status == 200
-        assert d.get("bot_name") == "Hermes"
+        assert d.get("bot_name") == "云千易"
         d2, _ = get("/api/settings")
-        assert d2.get("bot_name") == "Hermes"
+        assert d2.get("bot_name") == "云千易"
     finally:
-        post("/api/settings", {"bot_name": "Hermes"})
+        post("/api/settings", {"bot_name": "云千易"})
 
 
-def test_settings_whitespace_bot_name_defaults_to_hermes():
-    """Posting a whitespace-only bot_name should default to 'Hermes'."""
+def test_settings_whitespace_bot_name_defaults_to_yunqianyi():
+    """Posting a whitespace-only bot_name should default to '云千易'."""
     try:
         d, status = post("/api/settings", {"bot_name": "   "})
         assert status == 200
-        assert d.get("bot_name") == "Hermes"
+        assert d.get("bot_name") == "云千易"
     finally:
-        post("/api/settings", {"bot_name": "Hermes"})
+        post("/api/settings", {"bot_name": "云千易"})
 
 
 # ── Login page rendering ──────────────────────────────────────────────────
 
 def test_login_page_shows_default_bot_name():
-    """GET /login should contain 'Hermes' in title and h1 when default."""
+    """GET /login should include default bot_name in <title> and logo initial."""
     html, status = get_raw("/login")
     assert status == 200
-    assert "<title>Hermes" in html
-    assert "<h1>Hermes</h1>" in html
+    assert "<title>云千易" in html
+    assert '<div class="logo">云</div>' in html
 
 
 def test_login_page_shows_custom_bot_name():
@@ -107,9 +107,9 @@ def test_login_page_shows_custom_bot_name():
         html, status = get_raw("/login")
         assert status == 200
         assert "<title>Aria" in html
-        assert "<h1>Aria</h1>" in html
+        assert '<div class="logo">A</div>' in html
     finally:
-        post("/api/settings", {"bot_name": "Hermes"})
+        post("/api/settings", {"bot_name": "云千易"})
 
 
 def test_login_page_empty_name_does_not_crash():
@@ -119,7 +119,7 @@ def test_login_page_empty_name_does_not_crash():
     # Instead, verify that /login returns 200 reliably.
     html, status = get_raw("/login")
     assert status == 200
-    assert "Sign in" in html
+    assert 'class="card"' in html
 
 
 def test_login_page_xss_escaped():
@@ -133,4 +133,4 @@ def test_login_page_xss_escaped():
         # Escaped form should appear
         assert "&lt;script&gt;" in html
     finally:
-        post("/api/settings", {"bot_name": "Hermes"})
+        post("/api/settings", {"bot_name": "云千易"})

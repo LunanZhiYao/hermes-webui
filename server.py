@@ -3,7 +3,10 @@ Hermes Web UI -- Main server entry point.
 Thin routing shell: imports Handler, delegates to api/routes.py, runs server.
 All business logic lives in api/*.
 """
+from __future__ import annotations
+
 import logging
+import os
 import socket
 import sys
 import time
@@ -18,10 +21,36 @@ from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
+
+def _configure_stdio_logging() -> None:
+    """Configure root logging so ``logger.info`` etc. actually prints.
+
+    Stdlib defaults suppress INFO unless the root level is lowered. Use::
+
+        HERMES_WEBUI_LOG_LEVEL=INFO   # or DEBUG, WARNING, ERROR
+
+    in ``.env`` / environment (``start.sh`` sources ``.env``).
+    """
+    raw = (os.getenv("HERMES_WEBUI_LOG_LEVEL") or "WARNING").strip().upper()
+    level = getattr(logging, raw, None)
+    if not isinstance(level, int):
+        level = logging.WARNING
+    fmt = "%(asctime)s %(levelname)s %(name)s %(message)s"
+    kwargs = dict(level=level, format=fmt, stream=sys.stderr)
+    try:
+        logging.basicConfig(**kwargs, force=True)  # py3.8+
+    except TypeError:
+        logging.root.handlers.clear()
+        logging.basicConfig(**kwargs)
+
+
 from api.auth import check_auth
 from api.config import HOST, PORT, STATE_DIR, SESSION_DIR, DEFAULT_WORKSPACE
 from api.helpers import j, get_profile_cookie
 from api.profiles import set_request_profile, clear_request_profile
+from api.tenant_context import clear_tenant, saas_enabled, set_tenant
+from api.tenant_paths import tenant_hermes_home, tenant_webui_state_dir, user_key_from_user_id
+from api.tenant_provision import ensure_tenant_layout
 from api.routes import handle_delete, handle_get, handle_patch, handle_post
 from api.startup import auto_install_agent_deps, fix_credential_permissions
 from api.updates import WEBUI_VERSION
@@ -128,6 +157,23 @@ class Handler(BaseHTTPRequestHandler):
         try:
             parsed = urlparse(self.path)
             if not check_auth(self, parsed): return
+            # SaaS 模式下，在路由执行前注入租户上下文（TLS）。
+            # 这样后续 models/streaming/runtime_paths 都能按当前用户解析路径。
+            if saas_enabled():
+                from api.auth import get_authenticated_user_id
+                user_id = get_authenticated_user_id(self)
+                if user_id:
+                    user_key = user_key_from_user_id(user_id)
+                    h_home = tenant_hermes_home(user_key)
+                    w_state = tenant_webui_state_dir(user_key)
+                    ensure_tenant_layout(h_home)
+                    (w_state / "sessions").mkdir(parents=True, exist_ok=True)
+                    set_tenant(
+                        user_id=user_id,
+                        user_key=user_key,
+                        tenant_hermes_home=h_home,
+                        tenant_webui_state_dir=w_state,
+                    )
             result = handle_get(self, parsed)
             if result is False:
                 return j(self, {'error': 'not found'}, status=404)
@@ -135,6 +181,8 @@ class Handler(BaseHTTPRequestHandler):
             print(f'[webui] ERROR {self.command} {self.path}\n' + traceback.format_exc(), flush=True)
             return j(self, {'error': 'Internal server error'}, status=500)
         finally:
+            # 与 set_tenant 对称清理，防止线程复用导致租户上下文泄漏。
+            clear_tenant()
             clear_request_profile()
 
     def _handle_write(self, route_func) -> None:
@@ -146,6 +194,22 @@ class Handler(BaseHTTPRequestHandler):
         try:
             parsed = urlparse(self.path)
             if not check_auth(self, parsed): return
+            # 写请求路径同样需要注入租户上下文，确保写盘目录与读路径一致。
+            if saas_enabled():
+                from api.auth import get_authenticated_user_id
+                user_id = get_authenticated_user_id(self)
+                if user_id:
+                    user_key = user_key_from_user_id(user_id)
+                    h_home = tenant_hermes_home(user_key)
+                    w_state = tenant_webui_state_dir(user_key)
+                    ensure_tenant_layout(h_home)
+                    (w_state / "sessions").mkdir(parents=True, exist_ok=True)
+                    set_tenant(
+                        user_id=user_id,
+                        user_key=user_key,
+                        tenant_hermes_home=h_home,
+                        tenant_webui_state_dir=w_state,
+                    )
             result = route_func(self, parsed)
             if result is False:
                 return j(self, {'error': 'not found'}, status=404)
@@ -153,6 +217,8 @@ class Handler(BaseHTTPRequestHandler):
             print(f'[webui] ERROR {self.command} {self.path}\n' + traceback.format_exc(), flush=True)
             return j(self, {'error': 'Internal server error'}, status=500)
         finally:
+            # 必须在 finally 清理，异常路径也不能遗漏。
+            clear_tenant()
             clear_request_profile()
 
     def do_POST(self) -> None:
@@ -195,6 +261,8 @@ def _raise_fd_soft_limit(target: int = 4096) -> dict:
 
 
 def main() -> None:
+    _configure_stdio_logging()
+
     from api.config import print_startup_config, verify_hermes_imports, _HERMES_FOUND
 
     print_startup_config()

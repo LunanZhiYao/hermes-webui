@@ -5,9 +5,14 @@ async function api(path,opts={}){
   // Retry up to 2 times on network errors (e.g. stale keep-alive after long idle).
   // Server errors (4xx/5xx) are NOT retried — only connection failures.
   let lastErr;
+  const jwt=(localStorage.getItem('hermes-jwt')||'').trim();
+  const uid=(localStorage.getItem('hermes-user-id')||'').trim();
+  const baseHeaders={'Content-Type':'application/json',...(opts.headers||{})};
+  if(jwt) baseHeaders['Authorization']=`Bearer ${jwt}`;
+  if(uid) baseHeaders['X-User-ID']=uid;
   for(let attempt=0;attempt<3;attempt++){
     try{
-      const res=await fetch(url.href,{credentials:'include',headers:{'Content-Type':'application/json'},...opts});
+      const res=await fetch(url.href,{credentials:'include',...opts,headers:baseHeaders});
       if(!res.ok){
         // 401 means the auth session expired. Redirect to login so the user can
         // re-authenticate. This is especially important for iOS PWA (standalone mode)
@@ -41,8 +46,12 @@ async function api(path,opts={}){
 }
 
 // Persist/restore expanded directory state per workspace in localStorage
+function _workspaceRootForExpandKey(){
+  return (S.session && S.session.workspace)
+    || ((typeof S._profileDefaultWorkspace === 'string' && S._profileDefaultWorkspace.trim()) || '');
+}
 function _wsExpandKey(){
-  const ws=S.session&&S.session.workspace;
+  const ws=_workspaceRootForExpandKey();
   return ws?'hermes-webui-expanded:'+ws:null;
 }
 function _saveExpandedDirs(){
@@ -58,15 +67,29 @@ function _restoreExpandedDirs(){
   }catch(e){S._expandedDirs=new Set();}
 }
 
+async function _apiWorkspaceList(relPath){
+  const r=encodeURIComponent(relPath||'.');
+  if(S.session && S.session.session_id){
+    return api(`/api/list?session_id=${encodeURIComponent(S.session.session_id)}&path=${r}`);
+  }
+  const def=(typeof S._profileDefaultWorkspace==='string'&&S._profileDefaultWorkspace.trim());
+  if(def){
+    return api(`/api/workspace/default-list?path=${r}`);
+  }
+  throw new Error('no workspace list context');
+}
+if(typeof window!=='undefined') window._apiWorkspaceList=_apiWorkspaceList;
+
 async function loadDir(path){
-  if(!S.session)return;
+  const canListWithoutSession=(typeof S._profileDefaultWorkspace==='string'&&S._profileDefaultWorkspace.trim());
+  if(!S.session && !canListWithoutSession)return;
   try{
     if(!path||path==='.'){
       S._dirCache={};
       _restoreExpandedDirs();  // restore per-workspace expanded state on root load
     }
     S.currentDir=path||'.';
-    const data=await api(`/api/list?session_id=${encodeURIComponent(S.session.session_id)}&path=${encodeURIComponent(path)}`);
+    const data=await _apiWorkspaceList(path||'.');
     S.entries=data.entries||[];renderBreadcrumb();renderFileTree();
     // Pre-fetch contents of restored expanded dirs so they render without a second click
     // (parallelized — avoids serial waterfall when multiple dirs are expanded)
@@ -75,7 +98,7 @@ async function loadDir(path){
       const pending=[...expanded].filter(dirPath=>!S._dirCache[dirPath]);
       if(pending.length){
         const results=await Promise.all(pending.map(dirPath=>
-          api(`/api/list?session_id=${encodeURIComponent(S.session.session_id)}&path=${encodeURIComponent(dirPath)}`)
+          _apiWorkspaceList(dirPath)
             .then(dc=>({dirPath,entries:dc.entries||[]}))
             .catch(()=>({dirPath,entries:[]}))
         ));
@@ -117,7 +140,8 @@ async function _refreshGitBadge(){
 }
 
 function navigateUp(){
-  if(!S.session||S.currentDir==='.')return;
+  if(S.currentDir==='.')return;
+  if(!(S.session||(typeof S._profileDefaultWorkspace==='string'&&S._profileDefaultWorkspace.trim())))return;
   const parts=S.currentDir.split('/');
   parts.pop();
   loadDir(parts.length?parts.join('/'):'.');

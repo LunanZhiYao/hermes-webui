@@ -179,6 +179,14 @@ class TestIndexHtmlIntegration:
         assert "sw.js?v=__WEBUI_VERSION__" in src
         assert "static/ui.js?v=__WEBUI_VERSION__" in src
 
+    def test_index_loads_storage_clear_before_sessions(self):
+        """Shared user-switch storage cleanup must run before sessions.js defines
+        clearHermesBrowserCachesForUserSwitch (delegates to window.clearHermesBrowserStorageForUserSwitch).
+        """
+        src = INDEX.read_text(encoding="utf-8")
+        assert "static/hermes-storage-clear.js?v=__WEBUI_VERSION__" in src
+        assert src.find("hermes-storage-clear.js") < src.find("static/sessions.js")
+
     def test_index_versions_stylesheet(self):
         """Regression for #1507: the `<link rel=stylesheet>` for style.css MUST
         carry the same `?v=__WEBUI_VERSION__` cache-bust query as the JS files.
@@ -223,6 +231,7 @@ class TestIndexHtmlIntegration:
             "commands.js",
             "icons.js",
             "i18n.js",
+            "hermes-storage-clear.js",
             "workspace.js",
             "terminal.js",
             "onboarding.js",

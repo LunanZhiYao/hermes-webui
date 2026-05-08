@@ -37,6 +37,10 @@ TLS_CERT = os.getenv("HERMES_WEBUI_TLS_CERT", "").strip() or None
 TLS_KEY = os.getenv("HERMES_WEBUI_TLS_KEY", "").strip() or None
 TLS_ENABLED = TLS_CERT is not None and TLS_KEY is not None
 
+# ── SaaS multi-tenant toggles ───────────────────────────────────────────────
+HERMES_WEBUI_SAAS = os.getenv("HERMES_WEBUI_SAAS", "").strip().lower() in {"1", "true", "yes", "on"}
+HERMES_WEBUI_STATE_ROOT = os.getenv("HERMES_WEBUI_STATE_ROOT", "").strip() or None
+
 # ── State directory (env-overridable, never inside repo) ──────────────────────
 STATE_DIR = (
     Path(os.getenv("HERMES_WEBUI_STATE_DIR", str(HOME / ".hermes" / "webui")))
@@ -192,8 +196,17 @@ def _get_config_path() -> Path:
     if env_override:
         return Path(env_override).expanduser()
     try:
-        from api.profiles import get_active_hermes_home
+        from api.profiles import get_active_hermes_home, get_shared_model_config_home
+        from api.tenant_context import get_tenant_hermes_home, saas_enabled
 
+        # 租户目录隔离数据，但 LLM 配置常在主机共用目录 — 与 streaming 里临时切换
+        # HERMES_HOME 调用 resolve_runtime_provider 的策略保持一致。
+        if saas_enabled():
+            try:
+                if get_tenant_hermes_home() is not None:
+                    return get_shared_model_config_home() / "config.yaml"
+            except Exception:
+                logger.debug("SaaS tenant check for config path failed", exc_info=True)
         return get_active_hermes_home() / "config.yaml"
     except ImportError:
         return HOME / ".hermes" / "config.yaml"
@@ -1433,6 +1446,23 @@ def get_effective_default_model(config_data: dict | None = None) -> str:
 VALID_REASONING_EFFORTS = ("minimal", "low", "medium", "high", "xhigh")
 
 
+def preview_reasoning_effort_setting(effort: str) -> str:
+    """Normalize a WebUI reasoning effort value without touching config.yaml.
+
+    Returns ``""`` when the operator chose model/config default (empty or
+    the literal ``default``). Raises ``ValueError`` when *effort* is invalid.
+    """
+    raw = str(effort or "").strip().lower()
+    if not raw or raw == "default":
+        return ""
+    if raw == "none" or raw in VALID_REASONING_EFFORTS:
+        return raw
+    raise ValueError(
+        f"Unknown reasoning effort '{effort}'. "
+        f"Valid: default, none, {', '.join(VALID_REASONING_EFFORTS)}."
+    )
+
+
 def parse_reasoning_effort(effort):
     """Parse an effort level into the dict the agent expects.
 
@@ -1649,11 +1679,15 @@ _models_cache_path = STATE_DIR / "models_cache.json"
 
 
 def _get_auth_store_path() -> Path:
-    """Return the auth.json path for the active Hermes profile."""
-    try:
-        from api.profiles import get_active_hermes_home as _gah
+    """Return the auth.json path used by WebUI runtime.
 
-        return _gah() / "auth.json"
+    WebUI 内统一使用共享 Hermes 配置目录下的 ``auth.json``，避免在多用户/多租户
+    场景下因 active profile 切换导致凭据写回到个人目录。
+    """
+    try:
+        from api.profiles import get_shared_model_config_home
+
+        return get_shared_model_config_home() / "auth.json"
     except ImportError:
         return HOME / ".hermes" / "auth.json"
 
@@ -3239,27 +3273,27 @@ def _get_session_agent_lock(session_id: str) -> threading.Lock:
 
 
 # ── Settings persistence ─────────────────────────────────────────────────────
-
+# 默认设置
 _SETTINGS_DEFAULTS = {
     "default_workspace": str(DEFAULT_WORKSPACE),
-    "onboarding_completed": False,
+    "onboarding_completed": True,
     "send_key": "enter",  # 'enter' or 'ctrl+enter'
     "show_token_usage": False,  # show input/output token badge below assistant messages
     "show_tps": False,  # show tokens-per-second chip in assistant message headers
     "show_cli_sessions": False,  # merge CLI sessions from state.db into the sidebar
     "sync_to_insights": False,  # mirror WebUI token usage to state.db for /insights
-    "check_for_updates": True,  # check if webui/agent repos are behind upstream
-    "theme": "dark",  # light | dark | system
-    "skin": "default",  # accent color skin: default | ares | mono | slate | poseidon | sisyphus | charizard
+    "check_for_updates": False,  # check if webui/agent repos are behind upstream
+    "theme": "light",  # light | dark | system
+    "skin": "ares",  # accent color skin: default | ares | mono | slate | poseidon | sisyphus | charizard
     "font_size": "default",  # small | default | large
-    "language": "en",  # UI locale code; must match a key in static/i18n.js LOCALES
+    "language": "zh",  # UI locale code; must match a key in static/i18n.js LOCALES
     "bot_name": os.getenv(
-        "HERMES_WEBUI_BOT_NAME", "Hermes"
+        "HERMES_WEBUI_BOT_NAME", "云千易"
     ),  # display name for the assistant
-    "sound_enabled": False,  # play notification sound when assistant finishes
+    "sound_enabled": True,  # play notification sound when assistant finishes
     "notifications_enabled": False,  # browser notification when tab is in background
     "show_thinking": True,  # show/hide thinking/reasoning blocks in chat view
-    "simplified_tool_calling": True,  # group tools/thinking into one quiet activity disclosure
+    "simplified_tool_calling": False,  # group tools/thinking into one quiet activity disclosure
     "api_redact_enabled": True,  # redact sensitive data (API keys, secrets) from API responses
     "sidebar_density": "compact",  # compact | detailed
     "auto_title_refresh_every": "0",  # adaptive title refresh: 0=off, 5/10/20=every N exchanges
@@ -3316,7 +3350,7 @@ def _normalize_appearance(theme, skin) -> tuple[str, str]:
         next_theme, legacy_skin = raw_theme, "default"
     else:
         # Unknown themes used to exist; default to dark so upgrades stay visually stable.
-        next_theme, legacy_skin = "dark", "default"
+        next_theme, legacy_skin = "light", "ares"
     next_skin = (
         raw_skin
         if raw_skin in _SETTINGS_SKIN_VALUES
@@ -3325,33 +3359,69 @@ def _normalize_appearance(theme, skin) -> tuple[str, str]:
     return next_theme, next_skin
 
 
-def load_settings() -> dict:
-    """Load settings from disk, merging with defaults for any missing keys."""
-    settings = dict(_SETTINGS_DEFAULTS)
-    stored = None
+def _safe_settings_dict(path: Path) -> dict | None:
+    """Best-effort read of a settings JSON object; None if missing or invalid."""
     try:
-        settings_exists = SETTINGS_FILE.exists()
+        exists = path.exists()
     except OSError:
-        # PermissionError or other OS-level error (e.g. UID mismatch in Docker)
-        # Treat as missing — start with defaults rather than crashing.
-        logger.debug("Cannot stat settings file %s (inaccessible?)", SETTINGS_FILE)
-        settings_exists = False
-    if settings_exists:
-        try:
-            stored = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
-            if isinstance(stored, dict):
-                settings.update(
-                    {
-                        k: v
-                        for k, v in stored.items()
-                        if k not in _SETTINGS_LEGACY_DROP_KEYS
-                    }
-                )
-        except Exception:
-            logger.debug("Failed to load settings from %s", SETTINGS_FILE)
+        logger.debug("Cannot stat settings file %s (inaccessible?)", path)
+        return None
+    if not exists:
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        return raw if isinstance(raw, dict) else None
+    except Exception:
+        logger.debug("Failed to load settings from %s", path)
+        return None
+
+
+def _active_ui_settings_path() -> Path:
+    """界面 preferences 文件路径；SaaS 已绑定租户时为 ~/.hermes/webui/users/<user_key>/settings.json。"""
+    try:
+        from api.runtime_paths import get_settings_path
+
+        return get_settings_path()
+    except ImportError:
+        return SETTINGS_FILE
+
+
+def load_settings() -> dict:
+    """Load settings from disk, merging with defaults for any missing keys.
+
+    SaaS 多租户：界面项读写各用户目录下的 settings.json；password_hash 始终落在全局
+    STATE_DIR/settings.json，以便 check_auth 在 set_tenant 之前仍能校验登录密码。
+    """
+    settings = dict(_SETTINGS_DEFAULTS)
+    global_path = SETTINGS_FILE
+    ui_path = _active_ui_settings_path()
+    same_file = ui_path.resolve() == global_path.resolve()
+
+    stored_global = _safe_settings_dict(global_path)
+    if isinstance(stored_global, dict):
+        ph = stored_global.get("password_hash")
+        if ph is not None:
+            settings["password_hash"] = ph
+
+    if same_file:
+        stored_ui = stored_global
+    else:
+        stored_ui = _safe_settings_dict(ui_path)
+        if stored_ui is None and isinstance(stored_global, dict):
+            stored_ui = stored_global
+
+    if isinstance(stored_ui, dict):
+        settings.update(
+            {
+                k: v
+                for k, v in stored_ui.items()
+                if k not in _SETTINGS_LEGACY_DROP_KEYS and k != "password_hash"
+            }
+        )
+
     settings["theme"], settings["skin"] = _normalize_appearance(
-        stored.get("theme") if isinstance(stored, dict) else settings.get("theme"),
-        stored.get("skin") if isinstance(stored, dict) else settings.get("skin"),
+        stored_ui.get("theme") if isinstance(stored_ui, dict) else settings.get("theme"),
+        stored_ui.get("skin") if isinstance(stored_ui, dict) else settings.get("skin"),
     )
     settings["default_model"] = get_effective_default_model()
     return settings
@@ -3392,6 +3462,7 @@ def save_settings(settings: dict) -> dict:
     pending_skin = current.get("skin")
     theme_was_explicit = False
     skin_was_explicit = False
+    password_dirty = False
     # Handle _set_password: hash and store as password_hash
     raw_pw = settings.pop("_set_password", None)
     if raw_pw and isinstance(raw_pw, str) and raw_pw.strip():
@@ -3399,9 +3470,11 @@ def save_settings(settings: dict) -> dict:
         from api.auth import _hash_password
 
         current["password_hash"] = _hash_password(raw_pw.strip())
+        password_dirty = True
     # Handle _clear_password: explicitly disable auth
     if settings.pop("_clear_password", False):
         current["password_hash"] = None
+        password_dirty = True
     for k, v in settings.items():
         if k in _SETTINGS_ALLOWED_KEYS:
             if k == "theme":
@@ -3437,12 +3510,36 @@ def save_settings(settings: dict) -> dict:
     current["default_workspace"] = str(
         resolve_default_workspace(current.get("default_workspace"))
     )
-    persisted = {k: v for k, v in current.items() if k != "default_model"}
-    SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SETTINGS_FILE.write_text(
-        json.dumps(persisted, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    ui_path = _active_ui_settings_path()
+    global_path = SETTINGS_FILE
+    same_file = ui_path.resolve() == global_path.resolve()
+    if same_file:
+        persisted = {k: v for k, v in current.items() if k != "default_model"}
+        ui_path.parent.mkdir(parents=True, exist_ok=True)
+        ui_path.write_text(
+            json.dumps(persisted, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    else:
+        persisted_ui = {
+            k: v
+            for k, v in current.items()
+            if k != "default_model" and k != "password_hash"
+        }
+        ui_path.parent.mkdir(parents=True, exist_ok=True)
+        ui_path.write_text(
+            json.dumps(persisted_ui, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        if password_dirty:
+            auth_blob: dict = {}
+            if current.get("password_hash") is not None:
+                auth_blob["password_hash"] = current["password_hash"]
+            global_path.parent.mkdir(parents=True, exist_ok=True)
+            global_path.write_text(
+                json.dumps(auth_blob, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
     # Update runtime defaults so new sessions use them immediately
     global DEFAULT_WORKSPACE
     if "default_workspace" in current:

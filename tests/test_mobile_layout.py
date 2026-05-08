@@ -743,8 +743,10 @@ def test_model_and_reasoning_controls_live_in_mobile_overflow_panel():
         "mobile model action must be inside the overflow panel"
     assert 'id="composerMobileReasoningAction"' in panel_html, \
         "mobile reasoning action must be inside the overflow panel"
-    assert 'onclick="toggleModelDropdown()"' in panel_html, \
-        "mobile model action must reuse the existing model dropdown"
+    assert 'composer-mobile-model-display-only' in panel_html, \
+        "mobile model row must be display-only (no model dropdown)"
+    assert 'onclick="toggleModelDropdown()"' not in panel_html, \
+        "mobile overflow must not open the removed model picker"
     assert 'onclick="toggleReasoningDropdown()"' in panel_html, \
         "mobile reasoning action must reuse the existing reasoning dropdown"
     assert 'id="composerMobileModelLabel"' in panel_html, \

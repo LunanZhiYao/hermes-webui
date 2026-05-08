@@ -53,7 +53,7 @@ class TestReasoningDropdownEscapesComposerLeft:
                 "composerReasoningDropdown is still nested inside .composer-left — "
                 "this is the exact bug #933 flagged: overflow-y: hidden clips "
                 "upward-opening absolute dropdowns. Move it alongside "
-                "#composerModelDropdown / #composerWsDropdown / #profileDropdown."
+                "#composerWsDropdown / #profileDropdown."
             )
         # Either way, check that the dropdown sits next to the other composer
         # dropdowns (reliable structural marker).
@@ -68,7 +68,6 @@ class TestReasoningDropdownEscapesComposerLeft:
             ("profileDropdown", INDEX.find('id="profileDropdown"')),
             ("composerWsDropdown", INDEX.find('id="composerWsDropdown"')),
             ("composerReasoningDropdown", INDEX.find('id="composerReasoningDropdown"')),
-            ("composerModelDropdown", INDEX.find('id="composerModelDropdown"')),
         ]
         for name, pos in positions:
             assert pos > -1, f"{name} not found in index.html"
@@ -341,8 +340,8 @@ class TestResizeHandlerSymmetry:
     open, the dropdown must be re-positioned so it stays aligned under its chip."""
 
     def test_resize_repositions_reasoning_dropdown(self):
-        # The global resize handler must handle both composerModelDropdown AND
-        # composerReasoningDropdown to keep them aligned when the window resizes.
+        # The global resize handler must re-position composerReasoningDropdown
+        # when the window resizes (model picker is display-only).
         m = re.search(
             r"window\.addEventListener\(\s*['\"]resize['\"][\s\S]*?\}\s*\)\s*;",
             UI_JS,

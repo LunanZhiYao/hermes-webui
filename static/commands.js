@@ -225,7 +225,7 @@ function cliOnlyCommandResponse(cmdName, meta){
   if(name==='browser'){
     extra='\n\nBrowser tools in WebUI must be configured server-side with the agent/browser environment. Once configured, ask the model to use browser tools directly; `/browser` itself only works in `hermes chat`.';
   }
-  return `\`/${name}\` is a Hermes CLI-only command and cannot run inside the WebUI.${detail}${extra}`;
+  return `\`/${name}\` is a 云千易 CLI-only command and cannot run inside the WebUI.${detail}${extra}`;
 }
 
 function _parseSlashAutocomplete(text){
@@ -797,7 +797,10 @@ async function cmdBtw(args){
   showToast(t('btw_asking'));
   const activeSid=S.session.session_id;
   try{
-    const r=await api('/api/btw',{method:'POST',body:JSON.stringify({session_id:activeSid,question})});
+    const r=await api('/api/btw',{method:'POST',body:JSON.stringify({
+      session_id:activeSid,question,
+      ...(typeof reasoningEffortChatPayload==='function'?reasoningEffortChatPayload():{})
+    })});
     if(r&&r.error){showToast(r.error);return;}
     // Connect to the ephemeral SSE stream
     const streamId=r.stream_id;
@@ -812,7 +815,10 @@ async function cmdBackground(args){
   showToast(t('bg_running'));
   const activeSid=S.session.session_id;
   try{
-    const r=await api('/api/background',{method:'POST',body:JSON.stringify({session_id:activeSid,prompt})});
+    const r=await api('/api/background',{method:'POST',body:JSON.stringify({
+      session_id:activeSid,prompt,
+      ...(typeof reasoningEffortChatPayload==='function'?reasoningEffortChatPayload():{})
+    })});
     if(r&&r.error){showToast(r.error);return;}
     // Show background badge and start polling
     if(typeof showBackgroundBadge==='function') showBackgroundBadge(r.task_id);
@@ -921,6 +927,9 @@ function cmdReasoning(args){
     api('/api/reasoning',{method:'POST',body:JSON.stringify({effort:arg})})
       .then(function(st){
         const eff=(st && st.reasoning_effort)||arg;
+        try{
+          localStorage.setItem('hermes-webui-reasoning-effort', eff || '');
+        }catch(_){}
         showToast(BRAIN+' Reasoning effort: '+eff+' (saved; applies to next turn)');
         if(typeof _applyReasoningChip==='function') _applyReasoningChip(eff);
       })

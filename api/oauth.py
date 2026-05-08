@@ -24,8 +24,18 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+def _default_auth_json_path() -> Path:
+    """Resolve the runtime auth store path for WebUI."""
+    try:
+        from api.config import _get_auth_store_path
+
+        return Path(_get_auth_store_path())
+    except Exception:
+        return Path.home() / ".hermes" / "auth.json"
+
+
 # Compatibility for older helper tests and self-heal code that import these.
-AUTH_JSON_PATH = Path.home() / ".hermes" / "auth.json"
+AUTH_JSON_PATH = _default_auth_json_path()
 
 CODEX_ISSUER = "https://auth.openai.com"
 CODEX_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
@@ -77,7 +87,7 @@ def _get_active_hermes_home() -> Path:
 
 def _read_auth_json(auth_path: Path | None = None) -> dict[str, Any]:
     """Read auth.json and return parsed dict, or an empty compatible store."""
-    path = auth_path or AUTH_JSON_PATH
+    path = auth_path or _default_auth_json_path()
     if path.exists():
         try:
             loaded = json.loads(path.read_text(encoding="utf-8"))
@@ -90,7 +100,12 @@ def _read_auth_json(auth_path: Path | None = None) -> dict[str, Any]:
 
 def read_auth_json():
     """Public wrapper for streaming credential self-heal code."""
-    return _read_auth_json()
+    try:
+        from api.config import _get_auth_store_path
+
+        return _read_auth_json(_get_auth_store_path())
+    except ImportError:
+        return _read_auth_json()
 
 
 def _write_auth_json(data: dict[str, Any], auth_path: Path | None = None) -> Path:
@@ -99,7 +114,7 @@ def _write_auth_json(data: dict[str, Any], auth_path: Path | None = None) -> Pat
     OAuth access/refresh tokens live in this file. The temp file is chmod 0600
     before rename so the final path never inherits a permissive process umask.
     """
-    path = auth_path or AUTH_JSON_PATH
+    path = auth_path or _default_auth_json_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f"{path.name}.tmp.{os.getpid()}.{uuid.uuid4().hex}")
     try:
@@ -197,7 +212,12 @@ def _persist_codex_credentials(hermes_home: Path, token_data: dict[str, Any]) ->
 
 # Backward-compatible wrapper used by older code/tests.
 def _save_codex_credentials(token_data):
-    return _persist_codex_credentials(_get_active_hermes_home(), token_data)
+    try:
+        from api.config import _get_auth_store_path
+
+        return _persist_codex_credentials(_get_auth_store_path().parent, token_data)
+    except ImportError:
+        return _persist_codex_credentials(_get_active_hermes_home(), token_data)
 
 
 # ── Codex protocol ──────────────────────────────────────────────────────────
@@ -376,7 +396,12 @@ def start_onboarding_oauth_flow(body: dict[str, Any] | None) -> dict[str, Any]:
             raise ValueError("Only OpenAI Codex OAuth is supported in WebUI onboarding right now")
         raise ValueError("provider is required")
 
-    hermes_home = _get_active_hermes_home()
+    try:
+        from api.config import _get_auth_store_path
+
+        auth_home = _get_auth_store_path().parent
+    except ImportError:
+        auth_home = _get_active_hermes_home()
     try:
         device = _request_codex_user_code()
     except Exception as exc:
@@ -398,7 +423,7 @@ def start_onboarding_oauth_flow(body: dict[str, Any] | None) -> dict[str, Any]:
         "user_code": user_code,
         "expires_at": expires_at,
         "poll_interval_seconds": interval,
-        "hermes_home": str(hermes_home),
+        "hermes_home": str(auth_home),
         "created_at": time.time(),
         "updated_at": time.time(),
     }

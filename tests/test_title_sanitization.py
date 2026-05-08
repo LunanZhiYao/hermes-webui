@@ -51,16 +51,16 @@ class TestGeneratedTitleSanitization(unittest.TestCase):
             "Session title auto-summary test",
         )
 
-    def test_fallback_title_non_latin_input_uses_english_placeholder(self):
+    def test_fallback_title_non_latin_input_uses_first_user_clause(self):
         self.assertEqual(
-            _fallback_title_from_exchange("讨论一下这个问题", ""),
-            "Conversation topic",
+            _fallback_title_from_exchange("\u8ba8\u8bba\u4e00\u4e0b\u8fd9\u4e2a\u95ee\u9898", ""),
+            "\u8ba8\u8bba\u4e00\u4e0b\u8fd9\u4e2a\u95ee\u9898",
         )
 
-    def test_fallback_title_non_latin_quoted_topic_uses_english_placeholder(self):
+    def test_fallback_title_non_latin_quoted_topic_preserved(self):
         self.assertEqual(
-            _fallback_title_from_exchange('Please review "讨论主题"', ""),
-            "Conversation topic",
+            _fallback_title_from_exchange('Please review "\u8ba8\u8bba\u4e3b\u9898"', ""),
+            "\u8ba8\u8bba\u4e3b\u9898",
         )
 
     def test_title_generation_source_has_no_cjk_literals(self):
