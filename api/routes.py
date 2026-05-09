@@ -1675,15 +1675,15 @@ body{background:#1a1a2e;color:#e8e8f0;font-family:-apple-system,BlinkMacSystemFo
   height:100vh;display:flex;align-items:center;justify-content:center}
 .card{background:#16213e;border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:36px 32px;
   width:320px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.3)}
-.logo{width:48px;height:48px;border-radius:12px;background:linear-gradient(145deg,#e8a030,#e94560);
-  display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;color:#fff;
-  margin:0 auto 12px;box-shadow:0 2px 12px rgba(233,69,96,.3)}
+.logo{width:48px;height:48px;border-radius:12px;background:#0a0a0a;margin:0 auto 12px;
+  overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center}
+.logo img.brand-mark{width:100%;height:100%;object-fit:cover;display:block}
 h1{font-size:18px;font-weight:600;margin-bottom:4px}
 .sub{font-size:13px;color:#c8c8da;margin:14px 0 8px}
 .hint{font-size:12px;color:#8888aa}
 </style></head><body>
 <div class="card">
-  <div class="logo">{{BOT_NAME_INITIAL}}</div>
+  <div class="logo"><img class="brand-mark" src="static/favicon.png" alt="{{BOT_NAME}}" width="48" height="48" decoding="async"></div>
   <h1>{{LOGIN_TITLE}}</h1>
   <p class="sub">{{LOGIN_SUBTITLE}}</p>
   <p class="hint">{{LOGIN_CONN_FAILED}}</p>
@@ -2429,7 +2429,6 @@ def handle_get(handler, parsed) -> bool:
             version_token = "na"
             _page = (
                 _LOGIN_PAGE_HTML.replace("{{BOT_NAME}}", _bn)
-                .replace("{{BOT_NAME_INITIAL}}", (_bn[:1] or "云"))
                 .replace("{{WEBUI_VERSION}}", version_token)
                 .replace("{{LANG}}", _html.escape(str(_login_strings.get("lang") or "en")))
                 .replace("{{LOGIN_TITLE}}", _html.escape(str(_login_strings.get("title") or "Access restricted")))

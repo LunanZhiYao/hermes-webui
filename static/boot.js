@@ -1244,7 +1244,11 @@ function applyBotName(){
   const sidebarH1=document.querySelector('.sidebar-header h1');
   if(sidebarH1) sidebarH1.textContent=name;
   const logo=document.querySelector('.sidebar-header .logo');
-  if(logo) logo.textContent=name.charAt(0).toUpperCase();
+  if(logo){
+    const mark=logo.querySelector('img.brand-mark');
+    if(mark) mark.alt=name;
+    else logo.textContent=name.charAt(0).toUpperCase();
+  }
   const topbarTitle=$('topbarTitle');
   if(topbarTitle && (!S.session)) topbarTitle.textContent=name;
   const msg=$('msg');

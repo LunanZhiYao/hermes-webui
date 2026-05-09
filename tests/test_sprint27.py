@@ -97,7 +97,8 @@ def test_login_page_shows_default_bot_name():
     html, status = get_raw("/login")
     assert status == 200
     assert "<title>云千易" in html
-    assert '<div class="logo">云</div>' in html
+    assert 'static/favicon.png' in html and 'class="brand-mark"' in html
+    assert 'alt="云千易"' in html
 
 
 def test_login_page_shows_custom_bot_name():
@@ -107,7 +108,7 @@ def test_login_page_shows_custom_bot_name():
         html, status = get_raw("/login")
         assert status == 200
         assert "<title>Aria" in html
-        assert '<div class="logo">A</div>' in html
+        assert 'alt="Aria"' in html and 'static/favicon.png' in html
     finally:
         post("/api/settings", {"bot_name": "云千易"})
 
