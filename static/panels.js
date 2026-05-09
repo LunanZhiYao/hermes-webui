@@ -321,17 +321,17 @@ function _cronProfileOptions(selected){
   const current = _cronProfileName(selected);
   const profiles = Array.isArray(_cronProfilesCache) ? _cronProfilesCache : [];
   const seen = new Set(['']);
-  const opts = [`<option value=""${current ? '' : ' selected'}>${esc(t('cron_profile_server_default') || 'server default')}</option>`];
-  for (const p of profiles) {
-    const name = _cronProfileName(p && p.name);
-    if (!name || seen.has(name)) continue;
-    seen.add(name);
-    const label = p && p.is_default ? `${name} (${t('default') || 'default'})` : name;
-    opts.push(`<option value="${esc(name)}"${current === name ? ' selected' : ''}>${esc(label)}</option>`);
-  }
-  if (current && !seen.has(current)) {
-    opts.push(`<option value="${esc(current)}" selected>${esc(current)} (${esc(t('not_available') || 'not available')})</option>`);
-  }
+  const opts = [`<option value="default"${current ? '' : ' selected'}>${esc(t('cron_profile_server_default') || 'server default')}</option>`];
+  // for (const p of profiles) {
+  //   const name = _cronProfileName(p && p.name);
+  //   if (!name || seen.has(name)) continue;
+  //   seen.add(name);
+  //   const label = p && p.is_default ? `${name} (${t('default') || 'default'})` : name;
+  //   opts.push(`<option value="${esc(name)}"${current === name ? ' selected' : ''}>${esc(label)}</option>`);
+  // }
+  // if (current && !seen.has(current)) {
+  //   opts.push(`<option value="${esc(current)}" selected>${esc(current)} (${esc(t('not_available') || 'not available')})</option>`);
+  // }
   return opts.join('');
 }
 
@@ -705,6 +705,10 @@ function _renderCronForm({ name, schedule, prompt, deliver, profile, isEdit }){
   if (!body || !title) return;
   title.textContent = isEdit ? (t('edit') + ' · ' + (name || schedule || t('scheduled_jobs'))) : t('new_job');
   const deliverOpt = (v,l) => `<option value="${v}"${deliver===v?' selected':''}>${esc(l)}</option>`;
+  /* Deliver select formerly included:
+     deliverOpt('discord','Discord')
+     deliverOpt('telegram','Telegram')
+  */
   body.innerHTML = `
     <div class="main-view-content">
       <form class="detail-form" onsubmit="event.preventDefault(); saveCronForm();">
@@ -725,8 +729,6 @@ function _renderCronForm({ name, schedule, prompt, deliver, profile, isEdit }){
           <label for="cronFormDeliver">${esc(t('cron_deliver_label') || 'Deliver output to')}</label>
           <select id="cronFormDeliver" ${isEdit ? 'disabled' : ''}>
             ${deliverOpt('local', t('cron_deliver_local') || 'Local (save output only)')}
-            ${deliverOpt('discord','Discord')}
-            ${deliverOpt('telegram','Telegram')}
           </select>
         </div>
         <div class="detail-form-row">
