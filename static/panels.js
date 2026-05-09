@@ -17,7 +17,7 @@ let _kanbanBoardMenuOpen = false;
 // EventSource fails to connect (proxy that strips text/event-stream, etc).
 let _kanbanEventSource = null;
 let _kanbanEventSourceFailures = 0;
-let _skillsData = null; // cached skills list
+let _skillsData = null; // cached GET /api/skills payload { skills, bundled_skills, personal_skills }
 let _cronList = null; // cached cron jobs (array)
 let _currentCronDetail = null; // full cron job object
 let _cronMode = 'empty'; // 'empty' | 'read' | 'create' | 'edit'
@@ -2350,26 +2350,80 @@ async function clearConversation() {
 }
 
 // ── Skills panel ──
+function _skillsPayloadFromApi(data) {
+  if (!data || typeof data !== 'object') {
+    return { skills: [], bundled_skills: [], personal_skills: [] };
+  }
+  const skills = data.skills || [];
+  if (!('bundled_skills' in data) && !('personal_skills' in data)) {
+    return { skills, bundled_skills: [], personal_skills: skills };
+  }
+  return {
+    skills,
+    bundled_skills: data.bundled_skills || [],
+    personal_skills: data.personal_skills || [],
+  };
+}
+
+function _filterSkillsArray(skills, query) {
+  if (!query) return skills || [];
+  return (skills || []).filter(s =>
+    (s.name||'').toLowerCase().includes(query) ||
+    (s.description||'').toLowerCase().includes(query) ||
+    (s.category||'').toLowerCase().includes(query)
+  );
+}
+
+function _findSkillMeta(name) {
+  const d = _skillsData;
+  if (!d) return null;
+  const p = d.personal_skills || [];
+  const b = d.bundled_skills || [];
+  return p.find(x => x.name === name) || b.find(x => x.name === name);
+}
+
 async function loadSkills() {
   if (_skillsData) { renderSkills(_skillsData); return; }
   const box = $('skillsList');
   try {
     const data = await api('/api/skills');
-    _skillsData = data.skills || [];
-    // Prune collapsed state to only keep categories present in fresh data,
-    // avoiding stale keys when categories are renamed or removed server-side.
-    const liveCats = new Set(_skillsData.map(s => s.category || '(general)'));
-    for (const c of _collapsedCats) { if (!liveCats.has(c)) _collapsedCats.delete(c); }
+    _skillsData = _skillsPayloadFromApi(data);
+    const liveCats = new Set();
+    for (const src of ['bundled', 'personal']) {
+      const arr = src === 'bundled' ? (_skillsData.bundled_skills || []) : (_skillsData.personal_skills || []);
+      for (const s of arr) {
+        liveCats.add(src + ':' + (s.category || '(general)'));
+      }
+    }
+    for (const c of _collapsedCats) {
+      if (!liveCats.has(c)) _collapsedCats.delete(c);
+    }
     renderSkills(_skillsData);
   } catch(e) { box.innerHTML = `<div style="padding:12px;color:var(--accent);font-size:12px">Error: ${esc(e.message)}</div>`; }
 }
 
-let _collapsedCats = new Set(); // persisted collapsed state across re-renders
+let _collapsedCats = new Set(); // persisted collapsed state across re-renders (composite source:category)
+let _collapsedSources = new Set(); // 'bundled' | 'personal' — empty set => both sections expanded
+
+function _toggleSourceCollapse(sourceKey) {
+  if (_collapsedSources.has(sourceKey)) _collapsedSources.delete(sourceKey);
+  else _collapsedSources.add(sourceKey);
+  document.querySelectorAll('.skills-source-section').forEach(sec => {
+    const header = sec.querySelector('.skills-source-header');
+    if (header && header.dataset.source === sourceKey) {
+      const collapsed = _collapsedSources.has(sourceKey);
+      sec.classList.toggle('collapsed', collapsed);
+      const chev = header.querySelector('.cat-chevron');
+      if (chev) chev.style.transform = collapsed ? '' : 'rotate(90deg)';
+      const body = sec.querySelector('.skills-source-body');
+      if (body) body.style.display = collapsed ? 'none' : '';
+    }
+  });
+}
 
 function _toggleCatCollapse(cat) {
   if (_collapsedCats.has(cat)) _collapsedCats.delete(cat);
   else _collapsedCats.add(cat);
-  // Toggle DOM without full re-render
   document.querySelectorAll('.skills-category').forEach(sec => {
     const header = sec.querySelector('.skills-cat-header');
     if (header && header.dataset.cat === cat) {
@@ -2381,32 +2435,23 @@ function _toggleCatCollapse(cat) {
   });
 }
 
-function renderSkills(skills) {
-  const query = ($('skillsSearch').value || '').toLowerCase();
-  const filtered = query ? skills.filter(s =>
-    (s.name||'').toLowerCase().includes(query) ||
-    (s.description||'').toLowerCase().includes(query) ||
-    (s.category||'').toLowerCase().includes(query)
-  ) : skills;
-  // Group by category
+function _appendSkillCategories(container, sourceKey, filteredItems) {
   const cats = {};
-  for (const s of filtered) {
+  for (const s of filteredItems) {
     const cat = s.category || '(general)';
     if (!cats[cat]) cats[cat] = [];
     cats[cat].push(s);
   }
-  const box = $('skillsList');
-  box.innerHTML = '';
-  if (!filtered.length) { box.innerHTML = `<div style="padding:12px;color:var(--muted);font-size:12px">${esc(t('skills_no_match'))}</div>`; return; }
   for (const [cat, items] of Object.entries(cats).sort()) {
-    const collapsed = _collapsedCats.has(cat);
+    const composite = sourceKey + ':' + cat;
+    const collapsed = _collapsedCats.has(composite);
     const sec = document.createElement('div');
     sec.className = 'skills-category' + (collapsed ? ' collapsed' : '');
     const hdr = document.createElement('div');
     hdr.className = 'skills-cat-header';
-    hdr.dataset.cat = cat;
+    hdr.dataset.cat = composite;
     hdr.innerHTML = `<span class="cat-chevron" style="display:inline-flex;transition:transform .15s;${collapsed ? '' : 'transform:rotate(90deg)'}">${li('chevron-right',12)}</span> ${esc(cat)} <span style="opacity:.5">(${items.length})</span>`;
-    hdr.onclick = () => _toggleCatCollapse(cat);
+    hdr.onclick = () => _toggleCatCollapse(composite);
     sec.appendChild(hdr);
     for (const skill of items.sort((a,b) => a.name.localeCompare(b.name))) {
       const el = document.createElement('div');
@@ -2416,8 +2461,55 @@ function renderSkills(skills) {
       el.onclick = () => openSkill(skill.name, el);
       sec.appendChild(el);
     }
-    box.appendChild(sec);
+    container.appendChild(sec);
   }
+}
+
+function renderSkills(payload) {
+  const query = ($('skillsSearch').value || '').toLowerCase();
+  const rawP = payload.personal_skills || [];
+  const personalNames = new Set((payload.personal_skills || []).map(s => s.name));
+  const rawB = (payload.bundled_skills || []).filter(s => !personalNames.has(s.name));
+  const bundled = _filterSkillsArray(rawB, query);
+  const personal = _filterSkillsArray(rawP, query);
+  const box = $('skillsList');
+  box.innerHTML = '';
+
+  if (!rawB.length && !rawP.length) {
+    box.innerHTML = `<div style="padding:12px;color:var(--muted);font-size:12px">${esc(t('skills_sidebar_empty'))}</div>`;
+    return;
+  }
+  if (query && !bundled.length && !personal.length) {
+    box.innerHTML = `<div style="padding:12px;color:var(--muted);font-size:12px">${esc(t('skills_no_match'))}</div>`;
+    return;
+  }
+
+  const showBundled = !query || bundled.length > 0;
+  const showPersonal = !query || personal.length > 0;
+  const bLabel = query ? bundled.length : rawB.length;
+  const pLabel = query ? personal.length : rawP.length;
+
+  const appendSource = (sourceKey, titleKey, filteredItems, rawLen, visible) => {
+    if (!visible) return;
+    const wrap = document.createElement('div');
+    const srcCollapsed = _collapsedSources.has(sourceKey);
+    wrap.className = 'skills-source-section' + (srcCollapsed ? ' collapsed' : '');
+    const hdr = document.createElement('div');
+    hdr.className = 'skills-source-header';
+    hdr.dataset.source = sourceKey;
+    hdr.innerHTML = `<span class="cat-chevron" style="display:inline-flex;transition:transform .15s;${srcCollapsed ? '' : 'transform:rotate(90deg)'}">${li('chevron-right',12)}</span> ${esc(t(titleKey))} <span style="opacity:.5">(${rawLen})</span>`;
+    hdr.onclick = () => _toggleSourceCollapse(sourceKey);
+    const body = document.createElement('div');
+    body.className = 'skills-source-body';
+    if (srcCollapsed) body.style.display = 'none';
+    _appendSkillCategories(body, sourceKey, filteredItems);
+    wrap.appendChild(hdr);
+    wrap.appendChild(body);
+    box.appendChild(wrap);
+  };
+
+  appendSource('bundled', 'skills_section_bundled', bundled, bLabel, showBundled);
+  appendSource('personal', 'skills_section_personal', personal, pLabel, showPersonal);
 }
 
 function filterSkills() {
@@ -2537,10 +2629,8 @@ function editCurrentSkill() {
   if (!_currentSkillDetail) return;
   const s = _currentSkillDetail;
   let category = '';
-  if (_skillsData) {
-    const match = _skillsData.find(x => x.name === s.name);
-    if (match) category = match.category || '';
-  }
+  const match = _findSkillMeta(s.name);
+  if (match) category = match.category || '';
   _skillPreFormDetail = { name: s.name, content: s.content, linked_files: s.linked_files };
   _editingSkillName = s.name;
   _skillMode = 'edit';

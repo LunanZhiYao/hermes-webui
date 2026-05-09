@@ -1416,8 +1416,9 @@ window.refreshEmptyChatTitle=function(){
   // Initialize reasoning chip on boot (fixes #1103 — chip hidden until session load)
   if(typeof fetchReasoningChip==='function') fetchReasoningChip();
   const urlSession=(typeof _sessionIdFromLocation==='function')?_sessionIdFromLocation():null;
-  // Open at "/" without ?session=: start in an empty composer, not last tab's conversation.
-  // Deep links (?session= or /session/<id>/) still restore the requested session.
+  // Open at "/" without ?session= or /session/<id>/: ignore persisted last-tab id, then
+  // auto-create a new session so the user lands in a fresh conversation (not the old
+  // no-session homepage). Deep links still restore only the requested session.
   let saved=(urlSession||localStorage.getItem('hermes-webui-session'));
   if(saved && !urlSession){
     saved=null;
@@ -1466,11 +1467,31 @@ window.refreshEmptyChatTitle=function(){
       syncTopbar();syncWorkspacePanelState();await renderSessionList();if(typeof startGatewaySSE==='function')startGatewaySSE();await checkInflightOnBoot(saved);return;}
     catch(e){localStorage.removeItem('hermes-webui-session');}
   }
-  // no saved session - show empty state, wait for user to hit +
+  // First-run onboarding is visible — keep the old no-session shell until setup completes
+  // (_finishOnboarding may call newSession). Creating a session here can fail or clutter UI.
+  const _onboardingActive=(typeof ONBOARDING!=='undefined'&&ONBOARDING&&ONBOARDING.active);
+  // No deep-linked session: create one immediately (same as New chat), not a bare homepage.
+  if(!_onboardingActive){
+    try{
+      await newSession(false);
+      S._bootReady=true;
+      syncTopbar();
+      const _autoNewPanelPref=localStorage.getItem('hermes-webui-workspace-panel-pref')==='open'
+        || localStorage.getItem('hermes-webui-workspace-panel')==='open';
+      if(_autoNewPanelPref) _workspacePanelMode='browse';
+      syncWorkspacePanelState();
+      await renderSessionList();
+      if(typeof startGatewaySSE==='function') startGatewaySSE();
+      if(S.session&&typeof checkInflightOnBoot==='function') await checkInflightOnBoot(S.session.session_id);
+      const _msgTa=$('msg'); if(_msgTa) _msgTa.focus();
+      return;
+    }catch(_e){
+      console.error('[hermes] boot newSession failed', _e);
+    }
+  }
+  // Fallback: onboarding visible, or session creation failed — empty homepage until + or wizard done
   S._bootReady=true;
   syncTopbar();
-  // Restore panel pref so the workspace panel stays visible on a fresh load if the
-  // user had it open during their last session (#workspace-persist).
   const _freshPanelPref=localStorage.getItem('hermes-webui-workspace-panel-pref')==='open'
     || localStorage.getItem('hermes-webui-workspace-panel')==='open';
   if(_freshPanelPref) _workspacePanelMode='browse';
@@ -1479,7 +1500,6 @@ window.refreshEmptyChatTitle=function(){
   if(S._profileDefaultWorkspace&&typeof loadDir==='function'){try{await loadDir('.');}catch(_){ }}
   $('emptyState').style.display='';
   await renderSessionList();
-  // Start real-time gateway session sync if setting is enabled
   if(typeof startGatewaySSE==='function') startGatewaySSE();
 })().catch(e=>{
   console.error('[hermes] boot failed', e);

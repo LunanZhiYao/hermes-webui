@@ -388,6 +388,7 @@ function renderFileBreadcrumb(filePath) {
 
 function openInBrowser(){
   if(!_previewCurrentPath||!S.session) return;
-  const url=`api/file/raw?session_id=${encodeURIComponent(S.session.session_id)}&path=${encodeURIComponent(_previewCurrentPath)}`;
+  // Add &inline=1 to serve HTML/PDF inline in browser instead of downloading
+  const url=`api/file/raw?session_id=${encodeURIComponent(S.session.session_id)}&path=${encodeURIComponent(_previewCurrentPath)}&inline=1`;
   window.open(url,'_blank');
 }

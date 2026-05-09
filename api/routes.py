@@ -3230,54 +3230,12 @@ def handle_get(handler, parsed) -> bool:
     # ── Skills API（GET）— Agent 技能清单与单个技能正文/附属文件 ──
     if parsed.path == "/api/skills":
         from api.profiles import get_active_hermes_home
-        from api.skills_runtime import skills_tool_paths_for_home
-        from tools.skills_tool import skills_list as _skills_list
+        from api.skills_runtime import build_skills_api_response
 
-        with skills_tool_paths_for_home(get_active_hermes_home()):
-            raw = _skills_list()
-        data = json.loads(raw) if isinstance(raw, str) else raw
-        return j(handler, {"skills": data.get("skills", [])})
+        return j(handler, build_skills_api_response(Path(get_active_hermes_home())))
 
     if parsed.path == "/api/skills/content":
-        from api.profiles import get_active_hermes_home
-        from api.skills_runtime import skills_tool_paths_for_home
-        from tools.skills_tool import skill_view as _skill_view, SKILLS_DIR
-
-        qs = parse_qs(parsed.query)
-        name = qs.get("name", [""])[0]
-        if not name:
-            return j(handler, {"error": "name required"}, status=400)
-        file_path = qs.get("file", [""])[0]
-        with skills_tool_paths_for_home(get_active_hermes_home()):
-            if file_path:
-                # Serve a linked file from the skill directory
-                import re as _re
-
-                if _re.search(r"[*?\[\]]", name):
-                    return bad(handler, "Invalid skill name", 400)
-                skill_dir = None
-                for p in SKILLS_DIR.rglob(name):
-                    if p.is_dir():
-                        skill_dir = p
-                        break
-                if not skill_dir:
-                    return bad(handler, "Skill not found", 404)
-                target = (skill_dir / file_path).resolve()
-                try:
-                    target.relative_to(skill_dir.resolve())
-                except ValueError:
-                    return bad(handler, "Invalid file path", 400)
-                if not target.exists() or not target.is_file():
-                    return bad(handler, "File not found", 404)
-                return j(
-                    handler,
-                    {"content": target.read_text(encoding="utf-8"), "path": file_path},
-                )
-            raw = _skill_view(name)
-        data = json.loads(raw) if isinstance(raw, str) else raw
-        if not isinstance(data.get("linked_files"), dict):
-            data["linked_files"] = {}
-        return j(handler, data)
+        return _handle_skills_content_get(handler, parsed)
 
     # ── Memory API（GET）— 用户/会话记忆侧车读取 ──
     if parsed.path == "/api/memory":
@@ -5082,7 +5040,9 @@ def _serve_file_bytes(handler, target: Path, mime: str, disposition: str, cache_
         handler.send_response(416)
         handler.send_header("Content-Range", f"bytes */{file_size}")
         handler.send_header("Accept-Ranges", "bytes")
-        _security_headers(handler)
+        # For HTML inline preview, allow iframe embedding
+        allow_iframe = csp is not None and "sandbox" in csp
+        _security_headers(handler, allow_iframe=allow_iframe)
         handler.end_headers()
         return True
 
@@ -5098,7 +5058,9 @@ def _serve_file_bytes(handler, target: Path, mime: str, disposition: str, cache_
     handler.send_header("Content-Disposition", _content_disposition_value(disposition, target.name))
     if csp:
         handler.send_header("Content-Security-Policy", csp)
-    _security_headers(handler)
+    # For HTML inline preview (CSP sandbox set), allow iframe embedding
+    allow_iframe = csp is not None and "sandbox" in csp
+    _security_headers(handler, allow_iframe=allow_iframe)
     handler.end_headers()
 
     if content_length:
@@ -7750,6 +7712,64 @@ def _handle_handoff_summary(handler, body):
             "fallback": True,
             "warning": f"Summary generation used local fallback: {_sanitize_error(e)}",
         })
+
+
+def _handle_skills_content_get(handler, parsed):
+    """Resolve skill main content or a linked file: active profile first, then bundled agent ``skills/``."""
+    import re as _re
+    from api.profiles import get_active_hermes_home
+    from api.skills_runtime import hermes_agent_repo_root, skills_tool_paths_for_home
+    from tools.skills_tool import skill_view as _skill_view, SKILLS_DIR
+
+    qs = parse_qs(parsed.query)
+    name = qs.get("name", [""])[0]
+    if not name:
+        return j(handler, {"error": "name required"}, status=400)
+    file_path = qs.get("file", [""])[0]
+
+    homes: list[Path] = [Path(get_active_hermes_home()).expanduser().resolve()]
+    ar = hermes_agent_repo_root()
+    if ar:
+        ar = ar.resolve()
+        if ar not in homes:
+            homes.append(ar)
+
+    last_err = "Skill not found"
+    for home in homes:
+        with skills_tool_paths_for_home(home):
+            if file_path:
+                if _re.search(r"[*?\[\]]", name):
+                    return bad(handler, "Invalid skill name", 400)
+                skill_dir = None
+                for p in SKILLS_DIR.rglob(name):
+                    if p.is_dir():
+                        skill_dir = p
+                        break
+                if not skill_dir:
+                    continue
+                target = (skill_dir / file_path).resolve()
+                try:
+                    target.relative_to(skill_dir.resolve())
+                except ValueError:
+                    return bad(handler, "Invalid file path", 400)
+                if not target.is_file():
+                    continue
+                return j(
+                    handler,
+                    {"content": target.read_text(encoding="utf-8"), "path": file_path},
+                )
+            raw = _skill_view(name)
+        data = json.loads(raw) if isinstance(raw, str) else raw
+        if isinstance(data, dict) and data.get("success"):
+            if not isinstance(data.get("linked_files"), dict):
+                data["linked_files"] = {}
+            return j(handler, data)
+        if isinstance(data, dict) and data.get("error"):
+            last_err = str(data["error"])
+
+    if file_path:
+        return bad(handler, "File not found", 404)
+    return bad(handler, last_err, 404)
 
 
 def _handle_skill_save(handler, body):

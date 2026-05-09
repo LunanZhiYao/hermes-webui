@@ -35,10 +35,19 @@ def safe_resolve(root: Path, requested: str) -> Path:
     return resolved
 
 
-def _security_headers(handler):
-    """Add security headers to every response."""
+def _security_headers(handler, *, allow_iframe: bool = False):
+    """Add security headers to every response.
+    
+    Args:
+        handler: The request handler
+        allow_iframe: If True, skip X-Frame-Options header to allow iframe embedding
+                     (used for HTML preview in workspace panel)
+    """
     handler.send_header('X-Content-Type-Options', 'nosniff')
-    handler.send_header('X-Frame-Options', 'DENY')
+    # Only set X-Frame-Options when not explicitly allowing iframe embedding.
+    # For HTML previews (?inline=1), we rely on CSP sandbox instead.
+    if not allow_iframe:
+        handler.send_header('X-Frame-Options', 'DENY')
     handler.send_header('Referrer-Policy', 'same-origin')
     handler.send_header(
         'Content-Security-Policy',
