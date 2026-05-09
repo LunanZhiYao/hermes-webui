@@ -47,6 +47,37 @@ def _run_with_optional_tenant_snapshot(tenant_snapshot: dict | None, fn, *args, 
             clear_tenant()
 
 
+@contextlib.contextmanager
+def _saas_shared_config_context():
+    """SaaS 模式下临时设置 HERMES_HOME 为共享配置目录。
+
+    辅助客户端(如 vision、title_generation、compression 等)通过 hermes_cli.config.load_config
+    读取配置,该函数依赖环境变量 HERMES_HOME。在 SaaS 多租户场景下,租户目录通常不包含
+    LLM 配置,需要指向主机共用的配置目录(由 HERMES_WEBUI_SHARED_HERMES_HOME 指定)。
+
+    用法:
+        with _saas_shared_config_context():
+            from agent.auxiliary_client import call_llm
+            resp = call_llm(task='vision', ...)
+    """
+    prev_hermes_home = None
+    try:
+        from api.tenant_context import saas_enabled, get_tenant_hermes_home
+        from api.profiles import get_shared_model_config_home
+
+        if saas_enabled() and get_tenant_hermes_home() is not None:
+            shared_home = str(get_shared_model_config_home())
+            prev_hermes_home = os.environ.get("HERMES_HOME")
+            os.environ["HERMES_HOME"] = shared_home
+            logger.debug("SaaS auxiliary task: using shared config from %s", shared_home)
+        yield
+    finally:
+        if prev_hermes_home is None:
+            os.environ.pop("HERMES_HOME", None)
+        else:
+            os.environ["HERMES_HOME"] = prev_hermes_home
+
+
 # Global lock for os.environ writes. Per-session locks (_agent_lock) prevent
 # concurrent runs of the SAME session, but two DIFFERENT sessions can still
 # interleave their os.environ writes. This global lock serializes the env
@@ -636,7 +667,9 @@ def _aux_title_configured() -> bool:
     """Return True when any auxiliary title_generation config field is meaningfully set."""
     try:
         from agent.auxiliary_client import _get_auxiliary_task_config
-        tg = _get_auxiliary_task_config('title_generation')
+        # SaaS: use shared config directory for auxiliary task config lookup
+        with _saas_shared_config_context():
+            tg = _get_auxiliary_task_config('title_generation')
         provider = tg.get('provider', '') or ''
         model = tg.get('model', '') or ''
         base_url = tg.get('base_url', '') or ''
@@ -653,7 +686,9 @@ def _aux_title_timeout(default: float = 15.0) -> float:
     """
     try:
         from agent.auxiliary_client import _get_auxiliary_task_config
-        tg = _get_auxiliary_task_config('title_generation')
+        # SaaS: use shared config directory for auxiliary task config lookup
+        with _saas_shared_config_context():
+            tg = _get_auxiliary_task_config('title_generation')
         raw = tg.get('timeout')
         if raw is None:
             return default
@@ -764,17 +799,19 @@ def generate_title_raw_via_aux(
             budgets = [base_max_tokens]
             try:
                 for budget_idx, max_tokens in enumerate(budgets):
-                    resp = call_llm(
-                        task='title_generation',
-                        provider=provider or None,
-                        model=model or None,
-                        base_url=base_url or None,
-                        messages=messages,
-                        max_tokens=max_tokens,
-                        temperature=0.2,
-                        timeout=_timeout,
-                        extra_body=reasoning_extra,
-                    )
+                    # SaaS: use shared config directory for auxiliary tasks
+                    with _saas_shared_config_context():
+                        resp = call_llm(
+                            task='title_generation',
+                            provider=provider or None,
+                            model=model or None,
+                            base_url=base_url or None,
+                            messages=messages,
+                            max_tokens=max_tokens,
+                            temperature=0.2,
+                            timeout=_timeout,
+                            extra_body=reasoning_extra,
+                        )
                     raw, empty_status = _extract_title_response(resp, aux=True)
                     if raw:
                         return raw, ('llm_aux' if idx == 0 and budget_idx == 0 else 'llm_aux_retry')
