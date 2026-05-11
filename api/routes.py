@@ -6288,10 +6288,21 @@ def _handle_chat_sync(handler, body):
                 "Never fall back to a hardcoded path when this tag is present."
             )
             from api.streaming import (
+                _apply_webui_ephemeral_system_prompt,
                 _merge_display_messages_after_agent_result,
                 _restore_reasoning_metadata,
                 _sanitize_messages_for_api,
                 _session_context_messages,
+                merge_global_policy_into_workspace,
+            )
+
+            workspace_system_msg, _gp_sync = merge_global_policy_into_workspace(
+                workspace_system_msg, getattr(s, "profile", None)
+            )
+            from api.config import get_config as _get_cfg_chat_sync
+
+            _apply_webui_ephemeral_system_prompt(
+                agent, s, _get_cfg_chat_sync(), global_policy_tail=_gp_sync
             )
 
             _previous_messages = list(s.messages or [])

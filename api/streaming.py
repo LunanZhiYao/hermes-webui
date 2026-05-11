@@ -106,6 +106,144 @@ def _saas_prime_shared_env_from_dotenv():
         logger.debug("SaaS shared .env prime skipped", exc_info=True)
 
 
+_GLOBAL_POLICY_FILENAME = "GLOBAL_POLICY.md"
+_GLOBAL_POLICY_MAX_CHARS = 16_000
+
+
+def _load_shared_global_policy_append(session_profile: str | None = None) -> Optional[str]:
+    """Load deployment-wide instructions from the shared Hermes root.
+
+    Resolved path:
+
+    - If ``HERMES_WEBUI_SHARED_HERMES_HOME`` is set: ``<that dir>/GLOBAL_POLICY.md``
+    - Else: ``<Hermes home for this chat's profile>/GLOBAL_POLICY.md``
+
+    Streaming runs on a **worker thread** without the HTTP request's thread-local
+    ``hermes_profile`` cookie (#798), so we must pass ``session_profile`` from the
+    Session record — **not** ``get_active_profile_name()``, which would fall back
+    to the process default and point at the wrong directory.
+
+    Intended for operator-managed policy (e.g. language / reasoning locale) that
+    must apply to every chat without duplicating into each tenant's memories.
+    """
+    try:
+        from api.profiles import get_hermes_home_for_profile
+
+        shared = os.getenv("HERMES_WEBUI_SHARED_HERMES_HOME", "").strip()
+        if shared:
+            base = Path(shared).expanduser().resolve()
+        else:
+            base = get_hermes_home_for_profile(session_profile)
+
+        path = base / _GLOBAL_POLICY_FILENAME
+        if not path.is_file():
+            return None
+        raw = path.read_text(encoding="utf-8", errors="replace")
+        text = raw.strip()
+        if not text:
+            return None
+        if len(text) > _GLOBAL_POLICY_MAX_CHARS:
+            text = (
+                text[:_GLOBAL_POLICY_MAX_CHARS]
+                + f"\n\n[{_GLOBAL_POLICY_FILENAME} truncated to {_GLOBAL_POLICY_MAX_CHARS} characters]"
+            )
+        logger.info(
+            "WebUI GLOBAL_POLICY: loaded %d chars from %s",
+            len(text),
+            path,
+        )
+        return text
+    except Exception as exc:
+        logger.debug("GLOBAL_POLICY.md load skipped: %s", exc)
+        return None
+
+
+_GLOBAL_POLICY_TAIL_SENTINEL = object()
+
+
+def merge_global_policy_into_workspace(
+    workspace_system_msg: str, session_profile: str | None
+) -> tuple[str, str | None]:
+    """Prepend ``GLOBAL_POLICY.md`` to the workspace system_message; return (merged, policy_text).
+
+    ``policy_text`` is returned so callers can append the **same** text to
+    ``ephemeral_system_prompt`` without a second disk read. Many models weight
+    **tail** instructions more strongly for streaming / reasoning channels, so we
+    duplicate the policy (mid-stack + final append) when the file exists.
+    """
+    policy_text = _load_shared_global_policy_append(session_profile)
+    if not policy_text:
+        return workspace_system_msg, None
+    merged = (
+        "[Deployment policy — from GLOBAL_POLICY.md; obey alongside Hermes defaults]\n\n"
+        + policy_text
+        + "\n\n---\n\n"
+        + workspace_system_msg
+    )
+    return merged, policy_text
+
+
+def _apply_webui_ephemeral_system_prompt(
+    agent,
+    session,
+    cfg: dict | None,
+    *,
+    global_policy_tail: object = _GLOBAL_POLICY_TAIL_SENTINEL,
+) -> None:
+    """Set ``ephemeral_system_prompt``: personality + optional GLOBAL_POLICY tail.
+
+    When ``global_policy_tail`` is the sentinel, load from disk (self-heal paths).
+    When it is ``str | None`` from :func:`merge_global_policy_into_workspace`, use
+    that text at the **end** of the full system string (in addition to the
+    mid-stack copy in ``system_message``) so providers that stream reasoning in
+    English unless reminded at the tail still see the Chinese / policy rules.
+    """
+    if cfg is None:
+        try:
+            from api.config import get_config as _gc
+
+            cfg = _gc()
+        except Exception:
+            cfg = {}
+    if not isinstance(cfg, dict):
+        cfg = {}
+
+    _personality_prompt = None
+    _pname = getattr(session, "personality", None)
+    if _pname:
+        _agent_cfg = cfg.get("agent", {})
+        _personalities = _agent_cfg.get("personalities", {})
+        if isinstance(_personalities, dict) and _pname in _personalities:
+            _pval = _personalities[_pname]
+            if isinstance(_pval, dict):
+                _parts = [_pval.get("system_prompt", "") or _pval.get("prompt", "")]
+                if _pval.get("tone"):
+                    _parts.append(f'Tone: {_pval["tone"]}')
+                if _pval.get("style"):
+                    _parts.append(f'Style: {_pval["style"]}')
+                _personality_prompt = "\n".join(p for p in _parts if p)
+            else:
+                _personality_prompt = str(_pval)
+
+    if global_policy_tail is _GLOBAL_POLICY_TAIL_SENTINEL:
+        _gp = _load_shared_global_policy_append(getattr(session, "profile", None))
+    else:
+        _gp = global_policy_tail  # type: ignore[assignment]
+
+    parts = []
+    if _personality_prompt:
+        parts.append(_personality_prompt)
+    if _gp:
+        parts.append(
+            "[Deployment policy — repeated at request tail for reasoning-channel compliance]\n\n"
+            + str(_gp).strip()
+        )
+    if parts:
+        agent.ephemeral_system_prompt = "\n\n".join(parts)
+    else:
+        agent.ephemeral_system_prompt = None
+
+
 # Global lock for os.environ writes. Per-session locks (_agent_lock) prevent
 # concurrent runs of the SAME session, but two DIFFERENT sessions can still
 # interleave their os.environ writes. This global lock serializes the env
@@ -1818,6 +1956,7 @@ def _run_agent_streaming(
         _saas_stream_tenant_restored = True
     try:
         s = get_session(session_id)
+        _gp_tail = None  # set by merge_global_policy_into_workspace; used for ephemeral + self-heal rebuild
         s.workspace = str(Path(resolve_saas_workspace_path(workspace)).expanduser().resolve())
         s.model = model
         provider_context = (
@@ -2421,27 +2560,12 @@ def _run_agent_streaming(
                 "write_file, read_file, search_files, terminal workdir, and patch. "
                 "Never fall back to a hardcoded path when this tag is present."
             )
-            # Resolve personality prompt from config.yaml agent.personalities
-            # (matches hermes-agent CLI behavior — passes via ephemeral_system_prompt)
-            _personality_prompt = None
-            _pname = getattr(s, 'personality', None)
-            if _pname:
-                _agent_cfg = _cfg.get('agent', {})
-                _personalities = _agent_cfg.get('personalities', {})
-                if isinstance(_personalities, dict) and _pname in _personalities:
-                    _pval = _personalities[_pname]
-                    if isinstance(_pval, dict):
-                        _parts = [_pval.get('system_prompt', '') or _pval.get('prompt', '')]
-                        if _pval.get('tone'):
-                            _parts.append(f'Tone: {_pval["tone"]}')
-                        if _pval.get('style'):
-                            _parts.append(f'Style: {_pval["style"]}')
-                        _personality_prompt = '\n'.join(p for p in _parts if p)
-                    else:
-                        _personality_prompt = str(_pval)
-            # Pass personality via ephemeral_system_prompt (agent's own mechanism)
-            if _personality_prompt:
-                agent.ephemeral_system_prompt = _personality_prompt
+            # GLOBAL_POLICY: mid-stack (workspace system_message) + duplicate tail (ephemeral).
+            # Tail repetition helps reasoning/thinking streams that ignore early instructions.
+            workspace_system_msg, _gp_tail = merge_global_policy_into_workspace(
+                workspace_system_msg, getattr(s, "profile", None)
+            )
+            _apply_webui_ephemeral_system_prompt(agent, s, _cfg, global_policy_tail=_gp_tail)
             _pending_started_at = getattr(s, 'pending_started_at', None)
             # Normal chat-start sets pending_started_at before spawning this thread;
             # fallback to now only for recovered/legacy flows where that marker is absent
@@ -2623,6 +2747,9 @@ def _run_agent_streaming(
                             if 'credential_pool' in _agent_params:
                                 _agent_kwargs['credential_pool'] = _heal_rt.get('credential_pool')
                             agent = _AIAgent(**_agent_kwargs)
+                            _apply_webui_ephemeral_system_prompt(
+                                agent, s, _cfg, global_policy_tail=_gp_tail
+                            )
                             with STREAMS_LOCK:
                                 AGENT_INSTANCES[stream_id] = agent
                             from api.config import SESSION_AGENT_CACHE as _SAC, SESSION_AGENT_CACHE_LOCK as _SAC_L
@@ -3120,6 +3247,15 @@ def _run_agent_streaming(
                     if 'credential_pool' in _agent_params:
                         _heal_kwargs['credential_pool'] = _heal_rt.get('credential_pool')
                     _heal_agent = _AIAgent(**_heal_kwargs)
+                    try:
+                        _cfg_ex = _cfg
+                    except NameError:
+                        from api.config import get_config as _gc_ex
+
+                        _cfg_ex = _gc_ex()
+                    _apply_webui_ephemeral_system_prompt(
+                        _heal_agent, s, _cfg_ex, global_policy_tail=_gp_tail
+                    )
                     with STREAMS_LOCK:
                         AGENT_INSTANCES[stream_id] = _heal_agent
                     from api.config import SESSION_AGENT_CACHE as _SAC2, SESSION_AGENT_CACHE_LOCK as _SAC2_L
