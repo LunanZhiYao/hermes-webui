@@ -2438,6 +2438,14 @@ function _composerHasContent(){
   return !!((msg&&msg.value.trim().length>0)||S.pendingFiles.length>0);
 }
 
+/** True when Stop / interrupt can cancel work (streaming stream_id or in-flight chat/start). */
+function _composerHasCancelTarget(){
+  return !!(
+    S.activeStreamId ||
+    (typeof window !== 'undefined' && window._chatStartAbortController)
+  );
+}
+
 function _getExplicitBusyCommandAction(text){
   const trimmed=(text||'').trim();
   if(!trimmed.startsWith('/')) return null;
@@ -2451,7 +2459,7 @@ function _getExplicitBusyCommandAction(text){
     return 'queue';
   }
   if(name==='interrupt'){
-    if(S.activeStreamId&&typeof cancelStream==='function') return 'interrupt';
+    if(_composerHasCancelTarget()&&typeof cancelStream==='function') return 'interrupt';
     return 'queue';
   }
   return null;
@@ -2466,7 +2474,7 @@ function getComposerPrimaryAction(){
   const isBusy=!!S.busy||compressionRunning;
   if(!isBusy) return hasContent?'send':'disabled';
   if(!hasContent){
-    if(S.activeStreamId&&typeof cancelStream==='function') return 'stop';
+    if(_composerHasCancelTarget()&&typeof cancelStream==='function') return 'stop';
     return 'disabled';
   }
   const explicitAction=_getExplicitBusyCommandAction(msg&&msg.value);
@@ -2477,7 +2485,7 @@ function getComposerPrimaryAction(){
     return 'queue';
   }
   if(busyMode==='interrupt'){
-    if(S.activeStreamId&&typeof cancelStream==='function') return 'interrupt';
+    if(_composerHasCancelTarget()&&typeof cancelStream==='function') return 'interrupt';
     return 'queue';
   }
   return 'queue';

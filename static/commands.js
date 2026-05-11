@@ -620,7 +620,8 @@ async function cmdPersonality(args){
 
 async function cmdStop(){
   if(!S.session){showToast(t('no_active_session'));return;}
-  if(!S.activeStreamId){showToast(t('no_active_task'));return;}
+  const _pendingStart=typeof window!=='undefined'&&window._chatStartAbortController;
+  if(!S.activeStreamId&&!_pendingStart){showToast(t('no_active_task'));return;}
   if(typeof cancelStream==='function'){await cancelStream();showToast(t('stream_stopped'));}
   else showToast(t('cancel_unavailable'));
 }
@@ -658,7 +659,8 @@ async function cmdInterrupt(args){
   const msg=(args||'').trim();
   if(!msg){showToast(t('cmd_interrupt_no_msg'));return;}
   // If nothing is running, /interrupt <msg> just sends like a normal message
-  if(!S.busy||!S.activeStreamId){
+  const _pendingStartI=typeof window!=='undefined'&&window._chatStartAbortController;
+  if(!S.busy||(!S.activeStreamId&&!_pendingStartI)){
     const inp=$('msg');
     if(inp){inp.value=msg;}
     if(typeof send==='function'){await send();}
@@ -689,7 +691,8 @@ async function cmdSteer(args){
   const msg=(args||'').trim();
   if(!msg){showToast(t('cmd_steer_no_msg'));return;}
   // If nothing is running, /steer <msg> just sends like a normal message
-  if(!S.busy||!S.activeStreamId){
+  const _pendingStartS=typeof window!=='undefined'&&window._chatStartAbortController;
+  if(!S.busy||(!S.activeStreamId&&!_pendingStartS)){
     const inp=$('msg');
     if(inp){inp.value=msg;}
     if(typeof send==='function'){await send();}

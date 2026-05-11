@@ -3,6 +3,14 @@ async function _fetchCancelChatStream(streamId){
   await fetch(href,{credentials:'include'});
 }
 async function cancelStream(){
+  // User stopped during POST /api/chat/start — no stream_id yet; abort the fetch
+  // so send()'s catch can unwind (messages.js wires AbortController.signal).
+  const pendingStart =
+    typeof window !== 'undefined' && window._chatStartAbortController;
+  if(pendingStart){
+    try{ pendingStart.abort(); }catch(_){}
+    return;
+  }
   const streamId = S.activeStreamId;
   if(!streamId) return;
   try{

@@ -92,7 +92,8 @@ async function send(){
         updateQueueBadge(S.session.session_id);
         $('msg').value='';autoResize();
         S.pendingFiles=[];renderTray();
-        if(S.activeStreamId&&typeof cancelStream==='function'){
+        const _canCancel=!!(S.activeStreamId||(typeof window!=='undefined'&&window._chatStartAbortController));
+        if(_canCancel&&typeof cancelStream==='function'){
           showToast(t('busy_interrupt_confirm'),2000);
           await cancelStream();
         } else {
@@ -195,6 +196,9 @@ async function send(){
   startClarifyPolling(activeSid);
   _fetchYoloState(activeSid);  // sync YOLO pill with backend state
   S.activeStreamId = null;  // will be set after stream starts
+  const chatStartAbort=new AbortController();
+  if(typeof window!=='undefined') window._chatStartAbortController=chatStartAbort;
+  if(typeof updateSendBtn==='function') updateSendBtn();
 
   // Set provisional title from user message immediately so session appears
   // in the sidebar right away with a meaningful name (server may refine later)
@@ -227,7 +231,7 @@ async function send(){
       model_provider:S.session.model_provider||null,
       attachments:uploaded.length?uploaded:undefined,
       ...(typeof reasoningEffortChatPayload==='function'?reasoningEffortChatPayload():{})
-    })});
+    }),signal:chatStartAbort.signal});
     if(startData.effective_model && S.session){
       S.session.model=startData.effective_model;
       S.session.model_provider=startData.effective_model_provider||S.session.model_provider||null;
@@ -265,6 +269,28 @@ async function send(){
       void renderSessionList();
     }
   }catch(e){
+    const _aborted=
+      e&&(
+        e.name==='AbortError'||
+        (typeof DOMException!=='undefined'&&e instanceof DOMException&&e.name==='AbortError')
+      );
+    if(_aborted){
+      delete INFLIGHT[activeSid];
+      if(typeof clearInflightState==='function') clearInflightState(activeSid);
+      stopApprovalPolling();
+      stopClarifyPolling();
+      if(!_approvalSessionId || _approvalSessionId===activeSid) hideApprovalCard(true);
+      if(!_clarifySessionId || _clarifySessionId===activeSid) hideClarifyCard(true, 'terminal');
+      removeThinking();
+      setBusy(false);
+      setComposerStatus('');
+      if(typeof clearOptimisticSessionStreaming==='function') clearOptimisticSessionStreaming(activeSid);
+      if(typeof renderSessionList==='function') void renderSessionList();
+      if(typeof showToast==='function' && typeof t==='function'){
+        showToast(t('stream_stopped'),2000,'success');
+      }
+      return;
+    }
     const errMsg=String((e&&e.message)||'');
     const conflictActiveStream=/session already has an active stream/i.test(errMsg);
     if(conflictActiveStream){
@@ -297,6 +323,11 @@ async function send(){
     // Reconcile with server truth after immediately clearing the optimistic spinner.
     if(typeof renderSessionList==='function') void renderSessionList();
     return;
+  }finally{
+    if(typeof window!=='undefined' && window._chatStartAbortController===chatStartAbort){
+      window._chatStartAbortController=null;
+    }
+    if(typeof updateSendBtn==='function') updateSendBtn();
   }
 
   // Open SSE stream and render tokens live
