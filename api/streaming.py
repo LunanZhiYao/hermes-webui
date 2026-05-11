@@ -78,6 +78,34 @@ def _saas_shared_config_context():
             os.environ["HERMES_HOME"] = prev_hermes_home
 
 
+def _saas_prime_shared_env_from_dotenv():
+    """SaaS：租户目录常无 ``.env``；补齐主机共用目录中的密钥供 auxiliary / vision 展开。"""
+    try:
+        from api.tenant_context import saas_enabled, get_tenant_hermes_home
+        from api.profiles import get_shared_model_config_home
+
+        if not saas_enabled() or get_tenant_hermes_home() is None:
+            return
+        env_path = get_shared_model_config_home() / ".env"
+        if not env_path.is_file():
+            return
+        with open(env_path, encoding="utf-8-sig", errors="replace") as f:
+            for raw_line in f:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                if not key:
+                    continue
+                value = value.strip().strip('"\'')
+                prev = os.environ.get(key)
+                if prev is None or not str(prev).strip():
+                    os.environ[key] = value
+    except Exception:
+        logger.debug("SaaS shared .env prime skipped", exc_info=True)
+
+
 # Global lock for os.environ writes. Per-session locks (_agent_lock) prevent
 # concurrent runs of the SAME session, but two DIFFERENT sessions can still
 # interleave their os.environ writes. This global lock serializes the env
@@ -1847,6 +1875,7 @@ def _run_agent_streaming(
             os.environ['HERMES_SESSION_KEY'] = session_id
             if _profile_home:
                 os.environ['HERMES_HOME'] = _profile_home
+        _saas_prime_shared_env_from_dotenv()
         # Lock released — agent runs without holding it
         # Register a gateway-style notify callback so the approval system can
         # push the `approval` SSE event the moment a dangerous command is
