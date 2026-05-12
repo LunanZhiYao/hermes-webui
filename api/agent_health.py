@@ -10,12 +10,23 @@ heartbeat without shelling out or adding psutil as a hard dependency.
 from __future__ import annotations
 
 import importlib
+import os
 from datetime import datetime, timezone
 from typing import Any
 
 
 def _checked_at() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _agent_health_monitoring_disabled() -> bool:
+    """When true, WebUI skips gateway PID checks — no composer banner (#716)."""
+    return os.getenv("HERMES_WEBUI_DISABLE_AGENT_HEALTH", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 def _gateway_status_module():
@@ -73,6 +84,15 @@ def build_agent_health_payload() -> dict[str, Any]:
         probably not configured with a separate gateway process.
     """
     checked_at = _checked_at()
+    if _agent_health_monitoring_disabled():
+        return {
+            "alive": None,
+            "checked_at": checked_at,
+            "details": {
+                "state": "unknown",
+                "reason": "agent_health_disabled",
+            },
+        }
     try:
         gateway_status = _gateway_status_module()
     except Exception as exc:
