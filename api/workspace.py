@@ -784,9 +784,17 @@ def list_dir(workspace: Path, rel: str='.'):
             }
             if not is_dir:
                 try:
-                    entry['size'] = link_target.stat().st_size
+                    st = link_target.stat()
+                    entry['size'] = st.st_size
+                    entry['mtime'] = st.st_mtime
                 except OSError:
                     entry['size'] = None
+                    entry['mtime'] = None
+            else:
+                try:
+                    entry['mtime'] = link_target.stat().st_mtime
+                except OSError:
+                    entry['mtime'] = None
             entries.append(entry)
         else:
             # Use rel-based path so entries under symlink targets (outside
@@ -794,11 +802,13 @@ def list_dir(workspace: Path, rel: str='.'):
             entry_path = item.name
             if rel and rel != '.':
                 entry_path = rel + '/' + item.name
+            st = item.stat()
             entries.append({
                 'name': item.name,
                 'path': entry_path,
                 'type': 'dir' if item.is_dir() else 'file',
-                'size': item.stat().st_size if item.is_file() else None,
+                'size': st.st_size if item.is_file() else None,
+                'mtime': st.st_mtime,
             })
         if len(entries) >= 200:
             break

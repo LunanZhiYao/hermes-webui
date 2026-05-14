@@ -80,6 +80,73 @@ async function _apiWorkspaceList(relPath){
 }
 if(typeof window!=='undefined') window._apiWorkspaceList=_apiWorkspaceList;
 
+const WS_FILE_SEEN_LS='hermes-webui-ws-files-seen-v1';
+
+function _sortWorkspaceEntriesDesc(entries){
+  if(!Array.isArray(entries)||entries.length<=1)return entries;
+  return entries.slice().sort((a,b)=>{
+    const ma=Number(a&&a.mtime), mb=Number(b&&b.mtime);
+    const fa=Number.isFinite(ma), fb=Number.isFinite(mb);
+    if(fa&&fb&&ma!==mb)return mb-ma;
+    if(fa&&!fb)return -1;
+    if(!fa&&fb)return 1;
+    const na=String((a&&a.name)||''), nb=String((b&&b.name)||'');
+    return na.localeCompare(nb,undefined,{sensitivity:'base'});
+  });
+}
+
+function _wsSeenSig(path,mtime){ return String(path)+'\t'+String(mtime); }
+
+function _wsSeenGetAll(){
+  try{ return JSON.parse(localStorage.getItem(WS_FILE_SEEN_LS)||'{}'); }catch{ return {}; }
+}
+
+function markWorkspaceFileSeen(path,mtime){
+  const sid=S.session&&S.session.session_id;
+  const mt=Number(mtime);
+  if(!sid||!path||!Number.isFinite(mt))return;
+  const all=_wsSeenGetAll();
+  const arr=Array.isArray(all[sid])?all[sid].slice():[];
+  const sig=_wsSeenSig(path,mt);
+  if(arr.includes(sig))return;
+  arr.push(sig);
+  while(arr.length>800) arr.shift();
+  all[sid]=arr;
+  try{ localStorage.setItem(WS_FILE_SEEN_LS, JSON.stringify(all)); }catch{}
+  if(typeof renderFileTree==='function') renderFileTree();
+}
+
+function isWorkspaceFileUnseen(path,mtime){
+  const sid=S.session&&S.session.session_id;
+  const mt=Number(mtime);
+  if(!sid||!path||!Number.isFinite(mt)) return false;
+  const sig=_wsSeenSig(path,mt);
+  const arr=_wsSeenGetAll()[sid];
+  if(!Array.isArray(arr))return true;
+  return !arr.includes(sig);
+}
+
+function _lookupWorkspaceListedMtime(relPath){
+  if(!relPath)return null;
+  const cur=S.currentDir||'.';
+  const slash=relPath.indexOf('/');
+  const parent=slash===-1?'.':relPath.slice(0,slash);
+  const list=(parent===cur)?(S.entries||[]):((S._dirCache&&S._dirCache[parent])||[]);
+  const hit=list.find(e=>e&&e.path===relPath);
+  if(hit&&hit.mtime!=null&&Number.isFinite(Number(hit.mtime)))return Number(hit.mtime);
+  return null;
+}
+
+/** True when file mtime is at/after session start (agent-era writes), not legacy workspace files. */
+function isWorkspaceFileMtimeRecentForSession(mtime){
+  const mt=Number(mtime);
+  if(!Number.isFinite(mt))return false;
+  const ca=Number(S.session&&S.session.created_at);
+  if(!Number.isFinite(ca)||ca<=0)return false;
+  const caSec=ca<1e12?ca:ca/1000;
+  return mt>=caSec-120;
+}
+
 async function loadDir(path){
   const canListWithoutSession=(typeof S._profileDefaultWorkspace==='string'&&S._profileDefaultWorkspace.trim());
   if(!S.session && !canListWithoutSession)return;
@@ -90,7 +157,7 @@ async function loadDir(path){
     }
     S.currentDir=path||'.';
     const data=await _apiWorkspaceList(path||'.');
-    S.entries=data.entries||[];renderBreadcrumb();renderFileTree();
+    S.entries=_sortWorkspaceEntriesDesc(data.entries||[]);renderBreadcrumb();renderFileTree();
     // Pre-fetch contents of restored expanded dirs so they render without a second click
     // (parallelized — avoids serial waterfall when multiple dirs are expanded)
     if(!path||path==='.'){
@@ -102,7 +169,7 @@ async function loadDir(path){
             .then(dc=>({dirPath,entries:dc.entries||[]}))
             .catch(()=>({dirPath,entries:[]}))
         ));
-        for(const {dirPath,entries} of results) S._dirCache[dirPath]=entries;
+        for(const {dirPath,entries} of results) S._dirCache[dirPath]=_sortWorkspaceEntriesDesc(entries);
       }
       if(expanded.size>0)renderFileTree();
     }
@@ -249,13 +316,21 @@ function cancelEditMode(){
   updateEditBtn();
 }
 
-async function openFile(path){
+async function openFile(path, listedMtime){
   if(!S.session)return;
+  const resolveMtime=()=>{
+    if(listedMtime!=null&&Number.isFinite(Number(listedMtime)))return Number(listedMtime);
+    return _lookupWorkspaceListedMtime(path);
+  };
+  const markSeen=()=>{
+    const mt=resolveMtime();
+    if(mt!=null)markWorkspaceFileSeen(path,mt);
+  };
   const ext=fileExt(path);
 
   // Binary/download-only formats: trigger browser download, don't preview
   if(DOWNLOAD_EXTS.has(ext)){
-    downloadFile(path);
+    downloadFile(path,resolveMtime());
     return;
   }
 
@@ -272,6 +347,7 @@ async function openFile(path){
     $('previewImg').alt=path;
     $('previewImg').src=url;
     $('previewImg').onerror=()=>setStatus(t('image_load_failed'));
+    markSeen();
   } else if(AUDIO_EXTS.has(ext)||VIDEO_EXTS.has(ext)){
     const mode=VIDEO_EXTS.has(ext)?'video':'audio';
     showPreview(mode);
@@ -283,6 +359,7 @@ async function openFile(path){
         : `<${mode} src="${url.replace(/"/g,'%22')}" controls preload="metadata"></${mode}>`;
       if(typeof _applyMediaPlaybackPreferences==='function') _applyMediaPlaybackPreferences(wrap);
     }
+    markSeen();
   } else if(PDF_EXTS.has(ext)){
     showPreview('pdf');
     const url=`api/file/raw?session_id=${encodeURIComponent(S.session.session_id)}&path=${encodeURIComponent(path)}&inline=1`;
@@ -292,6 +369,7 @@ async function openFile(path){
       frame.src=url;
       frame.title=`PDF preview: ${path.split('/').pop()||path}`;
     }
+    markSeen();
   } else if(MD_EXTS.has(ext)){
     // Markdown: fetch text, render with renderMd, display as formatted HTML
     try{
@@ -300,6 +378,7 @@ async function openFile(path){
       _previewRawContent = data.content;
       $('previewMd').innerHTML=renderMd(data.content);
       requestAnimationFrame(()=>{if(typeof renderKatexBlocks==='function')renderKatexBlocks();});
+      markSeen();
     }catch(e){setStatus(t('file_open_failed'));}
   } else if(HTML_EXTS.has(ext)){
     // HTML: render in sandboxed iframe via raw endpoint.
@@ -317,26 +396,29 @@ async function openFile(path){
       iframe.src=''; // clear first to avoid stale content
       iframe.src=url;
     }
+    markSeen();
   } else {
     // Plain code / text -- but fall back to download if server signals binary
     try{
       const data=await api(`/api/file?session_id=${encodeURIComponent(S.session.session_id)}&path=${encodeURIComponent(path)}`);
       if(data.binary){
         // Server flagged this as binary content
-        downloadFile(path);
+        downloadFile(path,resolveMtime());
         return;
       }
       showPreview('code');
       $('previewCode').textContent=data.content;
+      markSeen();
     }catch(e){
       // If it's a 400/too-large error, offer download instead
-      downloadFile(path);
+      downloadFile(path,resolveMtime());
     }
   }
 }
 
-function downloadFile(path){
+function downloadFile(path, listedMtime){
   if(!S.session)return;
+  const mt=listedMtime!=null&&Number.isFinite(Number(listedMtime))?Number(listedMtime):_lookupWorkspaceListedMtime(path);
   // Trigger browser download via the raw file endpoint with content-disposition attachment
   const url=`api/file/raw?session_id=${encodeURIComponent(S.session.session_id)}&path=${encodeURIComponent(path)}&download=1`;
   const filename=path.split('/').pop();
@@ -345,6 +427,7 @@ function downloadFile(path){
   document.body.appendChild(a);a.click();
   setTimeout(()=>document.body.removeChild(a),100);
   showToast(t('downloading',filename),2000);
+  if(mt!=null)markWorkspaceFileSeen(path,mt);
 }
 
 

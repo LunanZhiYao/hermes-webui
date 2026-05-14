@@ -5969,6 +5969,20 @@ function _renderTreeItems(container, entries, depth){
     iconEl.className='file-icon';iconEl.innerHTML=fileIcon(item.name,item.type);
     el.appendChild(iconEl);
 
+    const _showWsUnreadDot=(item.type==='file'||(item.type==='symlink'&&item.is_dir===false))
+      &&item.mtime!=null
+      &&typeof isWorkspaceFileMtimeRecentForSession==='function'&&isWorkspaceFileMtimeRecentForSession(item.mtime)
+      &&typeof isWorkspaceFileUnseen==='function'&&isWorkspaceFileUnseen(item.path,item.mtime);
+    if(_showWsUnreadDot){
+      const dot=document.createElement('span');
+      dot.className='ws-file-unread-dot';
+      const tip=typeof t==='function'?t('workspace_file_unread_tooltip'):'';
+      if(tip) dot.title=tip;
+      dot.setAttribute('role','img');
+      dot.setAttribute('aria-label',tip||'');
+      el.appendChild(dot);
+    }
+
     // Name
     const nameEl=document.createElement('span');
     nameEl.className='file-name';nameEl.textContent=item.name;
@@ -6078,14 +6092,14 @@ function _renderTreeItems(container, entries, depth){
                 ? window._apiWorkspaceList
                 : (p)=>api(`/api/list?session_id=${encodeURIComponent(S.session.session_id)}&path=${encodeURIComponent(p)}`);
               const data=await listFn(item.path);
-              S._dirCache[item.path]=data.entries||[];
+              S._dirCache[item.path]=_sortWorkspaceEntriesDesc(data.entries||[]);
             }catch(e2){S._dirCache[item.path]=[];}
           }
           renderFileTree();
         }
       };
     }else{
-      el.onclick=async()=>openFile(item.path);
+      el.onclick=async()=>openFile(item.path,item.mtime);
     }
 
     container.appendChild(el);

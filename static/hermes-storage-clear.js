@@ -19,6 +19,7 @@
     try { localStorage.removeItem('hermes-date-groups-collapsed'); } catch (_) {}
     try { localStorage.removeItem('hermes-kanban-active-board'); } catch (_) {}
     try { localStorage.removeItem('hermes-webui-model'); } catch (_) {}
+    try { localStorage.removeItem('hermes-webui-ws-files-seen-v1'); } catch (_) {}
     try {
       var drop = [];
       var i;
